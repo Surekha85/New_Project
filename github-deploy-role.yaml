@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IAM Role for GitHub Actions deployment using OIDC
+
+Resources:
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  GitHubDeployRole{{stage}}:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GitHubDeployRole-{{stage}}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: arn:aws:iam::{{ACCOUNT_ID}}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - repo:Surekha85/New_Project:ref:refs/heads/{{stage}}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Policies:
+        - PolicyName: GitHubDeployPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudFormation
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource: "*"
+
+              # IAM (for creating roles)
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRole
+                  - iam:PassRole
+                Resource: "*"
+
+              # Lambda
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                Resource: "*"
+
+              # S3 (THIS FIXES YOUR ERROR 🔥)
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - arn:aws:s3:::jobsyme-assitants-infra-prod/*
+
+  
