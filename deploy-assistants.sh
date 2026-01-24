@@ -34,8 +34,8 @@ esac
 
 STACK_NAME="jobsyme-assistants-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
-S3_BUCKET="jobsyme-assitants-infra-${STAGE}"
-S3_PREFIX="jobsyme-assitants/$STAGE"
+S3_BUCKET="jobsyme-assistants-infra-${STAGE}"
+S3_PREFIX="jobsyme-assistants/$STAGE"
 PACKAGED_TEMPLATE=".packaged-auth-template.yaml"
 
 # Helper function to run AWS CLI with or without --profile
