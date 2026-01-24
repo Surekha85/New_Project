@@ -33,7 +33,7 @@ esac
 
 
 STACK_NAME="jobsyme-assistants-${STAGE}"
-FINAL_TEMPLATE="infra/candidate.yaml"
+FINAL_TEMPLATE="infra/assistants.yaml"
 S3_BUCKET="jobsyme-assitants-infra-${STAGE}"
 S3_PREFIX="jobsyme-assitants/$STAGE"
 PACKAGED_TEMPLATE=".packaged-auth-template.yaml"
