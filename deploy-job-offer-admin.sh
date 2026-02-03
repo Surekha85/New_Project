@@ -21,12 +21,12 @@ case "$STAGE" in
 esac
 
 # DynamoDB table names (stage-safe)
-CANDIDATES_TABLE="jobsyme-${STAGE}-candidates"
-ASSISTANTS_TABLE="jobsyme-${STAGE}-assistants"
-JOB_APPLICATIONS_TABLE="jobsyme-${STAGE}-job-applications"
-PORTFOLIO_TABLE="jobsyme-${STAGE}-portfolio"
-GITHUB_TABLE="jobsyme-${STAGE}-github-activities"
-LINKEDIN_TABLE="jobsyme-${STAGE}-linkedin-activities"
+CandidatesTableName="jobsyme-${STAGE}-candidates"
+AssistantsTableName="jobsyme-${STAGE}-assistants"
+JobApplicationsTableName="jobsyme-${STAGE}-job-applications"
+PortfolioTableName="jobsyme-${STAGE}-portfolio"
+GitHubActivitiesTableName="jobsyme-${STAGE}-github-activities"
+LinkedInActivitiesTableName="jobsyme-${STAGE}-linkedin-activities"
 
 STACK_NAME="admin-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
