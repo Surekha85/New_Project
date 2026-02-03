@@ -1,88 +1,777 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: Candidate Portal Infrastructure for JobSyme
-
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Jobsyme Admin Portal – AWS Infrastructure
 
 Parameters:
   Stage:
     Type: String
     AllowedValues:
-      - beta
-      - gamma
-      - prod
-    Description: Deployment stage (beta, gamma, prod)
+      - alpha
+    Description: Deployment stage
+  AdminApiDeploymentVersion:
+    Type: String
+    Default: "Version1"
+    Description: Version to force API Gateway redeployment
 
 Resources:
-  #  S3 Buckets
-  ########################################
-  # it stores candidate profiles (resumes, files..)  
-  CandidateProfileBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "jobsyme-${Stage}-assistant-profile"
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        IgnorePublicAcls: true
-        BlockPublicPolicy: true
-        RestrictPublicBuckets: true
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      VersioningConfiguration:
-        Status: Enabled
-
-  
   ########################################
   # DynamoDB Tables
   ########################################
-  AssistantsTable:
+  AdminsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "jobsyme-${Stage}-assistants"
+      TableName: !Sub "jobsyme-${Stage}-admins"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: candidateId
+        - AttributeName: adminId
           AttributeType: S
       KeySchema:
-        - AttributeName: candidateId
+        - AttributeName: adminId
           KeyType: HASH
 
-
-  # -----------------------
-  # Lambda Functions
-  # -----------------------
-  AssistantsLogoutFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: LambdaExecutionRole
+  ############################################################
+  # IAM
+  ############################################################
+  AdminPortalLambdaRole:
+    Type: AWS::IAM::Role
     Properties:
-      FunctionName: !Sub "jobsyme-${Stage}-assistants_login"
+      RoleName: !Sub "jobsyme-${Stage}-AdminPortalLambdaRole"
+
+      # TRUST POLICY (WHO can assume this role)
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+      # PERMISSION POLICIES (WHAT this role can do)
+      Policies:
+        - PolicyName: AdminAssumeCandidateRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource:
+                - !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
+                - !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+
+        - PolicyName: AdminCustomAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt AdminsTable.Arn
+
+
+  ############################################################
+  # Lambdas
+  ############################################################  
+  AdminLoginLogoutLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-login-logout"
+      Description: "Admin Login and Logout"
       Runtime: python3.10
-      Timeout: 15
-      MemorySize: 128
       Handler: app.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          CANDIDATES_TABLE: !Ref AssistantsTable
-      Code:
-        S3Bucket: !Sub "jobsyme-assitants-infra-${Stage}"
-        S3Key: !Sub "jobsyme-assistants/${Stage}/assistants_logout_lambda.zip"
+          ADMINS_TABLE: !Ref AdminsTable
+      Code: ../lambdas/admin_login_logout_lambda.zip
 
-  AssistantsLoginFunction:
+  CreateAssistantsLambda:
     Type: AWS::Lambda::Function
-    DependsOn: LambdaExecutionRole
     Properties:
-      FunctionName: !Sub "jobsyme-${Stage}-assistants_logout"
+      FunctionName: !Sub "jobsyme-${Stage}-admin-create-assistants"
+      Description: "Admins will Creates assistant users"
       Runtime: python3.10
-      Timeout: 15
-      MemorySize: 128
       Handler: app.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          JOB_APPLICATIONS_TABLE: !Ref AssistantsTable
-      Code:
-        S3Bucket: !Sub "jobsyme-assistants-infra-${Stage}"
-        S3Key: !Sub "jobsyme-assistants/${Stage}/assistants_login_lambda.zip"
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          ASSISTANTS: !ImportValue
+              Fn::Sub: "jobsyme-${Stage}-AssistantsTableName"
+      Code: ../lambdas/create_assistants_lambda.zip
 
+  GetAllAssistantsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-get-all-assistants"
+      Description: "Admins can able to see the Assistants"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          ASSISTANTS: !ImportValue
+              Fn::Sub: "jobsyme-${Stage}-AssistantsTableName"
+      Code: ../lambdas/get_all_assistants_lambda.zip
+  
+  GetAssistantByIdLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-get-assistant-by-id"
+      Description: "Get particular Assistant Details by ID"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          ASSISTANTS: !ImportValue
+              Fn::Sub: "jobsyme-${Stage}-AssistantsTableName"
+      Code: ../lambdas/get_assistant_by_id_lambda.zip
+
+  GetAllCandidatesLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-get-all-candidates"
+      Description: "Get all Candidates Details"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          CANDIDATE_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
+          
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+
+          CANDIDATES_TABLE:
+            !ImportValue jobsyme-${Stage}-CandidatesTableName
+
+          ASSISTANTS_TABLE:
+            !ImportValue jobsyme-${Stage}-AssistantsTableName
+
+          JOB_APPLICATIONS_TABLE:
+            !ImportValue jobsyme-${Stage}-JobApplicationsTableName
+
+          PORTFOLIO_TABLE:
+            !ImportValue jobsyme-${Stage}-PortfolioTableName
+
+          GITHUB_ACTIVITIES_TABLE:
+            !ImportValue jobsyme-${Stage}-GitHubActivitiesTableName
+
+          LINKEDIN_ACTIVITIES_TABLE:
+            !ImportValue jobsyme-${Stage}-LinkedInActivitiesTableName
+      Code: ../lambdas/get_all_candidates_lambda.zip
+
+  
+  GetCandidateProfileByIdLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-get-candidate-profile-by-id"
+      Description: "Get particular Candidate Details by ID"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          CANDIDATE_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+
+          CANDIDATES_TABLE:
+            !ImportValue jobsyme-${Stage}-CandidatesTableName
+
+          ASSISTANTS_TABLE:
+            !ImportValue jobsyme-${Stage}-AssistantsTableName
+
+          JOB_APPLICATIONS_TABLE:
+            !ImportValue jobsyme-${Stage}-JobApplicationsTableName
+
+          PORTFOLIO_TABLE:
+            !ImportValue jobsyme-${Stage}-PortfolioTableName
+
+          GITHUB_ACTIVITIES_TABLE:
+            !ImportValue jobsyme-${Stage}-GitHubActivitiesTableName
+
+          LINKEDIN_ACTIVITIES_TABLE:
+            !ImportValue jobsyme-${Stage}-LinkedInActivitiesTableName
+      Code: ../lambdas/get_candidate_profile_by_id_lambda.zip
+
+  AssignAssistantForCandidateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-assign-assistant"
+      Description: "Admin will Assign Assistant for a candidate"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 20
+      MemorySize: 512
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          # 🔐 ONE role for ALL cross-account tables
+          CANDIDATE_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
+          
+          ASSISTANT_DYNAMO_ROLE_ARN:
+            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+
+          # 📦 Table names (cross-account)
+          CANDIDATES:
+            !ImportValue jobsyme-${Stage}-CandidatesTableName
+          ASSISTANTS:
+            !ImportValue jobsyme-${Stage}-AssistantsTableName
+      Code: ../lambdas/assign_assistant_for_candidate_lambda.zip
+
+
+  ############################################################
+  # API Gateway
+  ############################################################
+  AdminPortalApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "jobsyme-admin-portal-${Stage}-api"
+      Description: REST API for Admin Portal operations
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  ############################################################
+  # API Gateway Resources
+  ############################################################
+  AdminResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt AdminPortalApi.RootResourceId
+      PathPart: "admin"
+      RestApiId: !Ref AdminPortalApi
+  
+  # admin/login-logout
+  AdminLoginLogoutResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "login-logout"
+      RestApiId: !Ref AdminPortalApi
+
+  # admin/create-assistant
+  CreateAssistantsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "create-assistant"
+      RestApiId: !Ref AdminPortalApi
+  
+  # admin/assistants
+  GetAssistantsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "assistants"
+      RestApiId: !Ref AdminPortalApi
+  
+  # admin/assistants/assistantId
+  AssistantByIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref GetAssistantsResource
+      PathPart: "{assistantId}"
+      RestApiId: !Ref AdminPortalApi
+
+  # admin/candidates
+  CandidatesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "candidates"
+      RestApiId: !Ref AdminPortalApi
+
+  # admin/candidates/candidateId
+  CandidateIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref CandidatesResource
+      PathPart: "{candidateId}"
+      RestApiId: !Ref AdminPortalApi
+
+  # admin/assign-assistant
+  AssignAssistantsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "assign-assistant"
+      RestApiId: !Ref AdminPortalApi
+
+
+  ############################################################
+  # API Methods
+  ############################################################  
+  # POST/admin/login-logout
+  AdminLoginLogoutMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AdminLoginLogoutResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AdminLoginLogoutLambda.Arn}/invocations"
+
+
+  CreateAssistantMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CreateAssistantsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateAssistantsLambda.Arn}/invocations"
+
+  GetAssistantsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref GetAssistantsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAllAssistantsLambda.Arn}/invocations"
+  
+  GetAssistantByIdMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantByIdResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations"
+        
+  GetAllCandidatesMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CandidatesResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAllCandidatesLambda.Arn}/invocations"
+
+  GetCandidateProfileByIdMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CandidateIdResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetCandidateProfileByIdLambda.Arn}/invocations"
+
+  AssignAssistantForCandidateMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssignAssistantsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AssignAssistantForCandidateLambda.Arn}/invocations"
+
+  ############################################################
+  # CORS OPTIONS Methods for all resources
+  ############################################################
+  AdminOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AdminResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+
+  
+  AdminLoginLogoutOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AdminLoginLogoutResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+  
+  CreateAssistantsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CreateAssistantsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+
+  GetAllAssistantsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref GetAssistantsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+  
+  GetAssistantByIdOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantByIdResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+
+  GetAllCandidatesOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CandidatesResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+
+  CandidateProfileByIdOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CandidateIdResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+
+  AdminAssignsAssistantOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssignAssistantsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+  
+  ############################################################
+  # Lambda Permissions for API Gateway
+  ############################################################
+  AdminLoginLogoutLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AdminLoginLogoutLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/POST/admin/login-logout"
+
+  CreateAssistantsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CreateAssistantsLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/POST/admin/create-assistant"
+
+  GetAllAssistantsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAllAssistantsLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/assistants"
+  
+  GetAssistantByIdLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAssistantByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/assistants/*"
+
+  GetAllCandidatesLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAllCandidatesLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/candidates"
+
+  GetCandidateProfileByIdLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetCandidateProfileByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/candidates/*"
+
+  AssignAssistantForCandidateLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AssignAssistantForCandidateLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/POST/admin/assign-assistant"
+  
+
+  ############################################################
+  # Default Gateway Responses for CORS on Errors
+  ############################################################
+  GatewayResponse4XX:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseType: DEFAULT_4XX
+      RestApiId: !Ref AdminPortalApi
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "method.request.header.Origin"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+
+  GatewayResponse5XX:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseType: DEFAULT_5XX
+      RestApiId: !Ref AdminPortalApi
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "method.request.header.Origin"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
+
+
+  ############################################################
+  # 8. Stage Deployment
+  ############################################################
+  AdminPortalDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      StageName: !Ref Stage
+      Description: !Sub "Admin Portal API deployment at ${AdminApiDeploymentVersion}"
+    DependsOn:
+    # Lambda-backed methods
+      - AdminLoginLogoutMethod
+      - CreateAssistantMethod
+      - GetAssistantsMethod
+      - GetAssistantByIdMethod
+      - GetAllCandidatesMethod
+      - GetCandidateProfileByIdMethod
+      - AssignAssistantForCandidateMethod
+      # OPTIONS (CORS) methods
+      - AdminLoginLogoutOptionsMethod
+      - CreateAssistantsOptionsMethod
+      - GetAllAssistantsOptionsMethod
+      - GetAssistantByIdOptionsMethod
+      - GetAllCandidatesOptionsMethod
+      - CandidateProfileByIdOptionsMethod
+      - AdminAssignsAssistantOptionsMethod
+
+
+Outputs:
+  # API Gateway
+  AdminPortalApiId:
+    Description: "API Gateway ID"
+    Value: !Ref AdminPortalApi 
+
+  CandidateApiRootResourceId:
+    Description: "Root Resource ID of the Candidate API"
+    Value: !GetAtt AdminPortalApi.RootResourceId
+
+  AdminPortalApiInvokeUrl:
+    Description: "Assistant Portal API URL"
+    Value: !Sub "https://${AdminPortalApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
+
+  # Dynamo DB
+  AdminsTableName:
+    Description: "DynamoDB table for admins"
+    Value: !Ref AdminsTable
+
+  # IAM Role
+  AdminPortalLambdaRoleName:
+    Description: "IAM Role used by all Lambda functions"
+    Value: !Ref AdminPortalLambdaRole
+
+   

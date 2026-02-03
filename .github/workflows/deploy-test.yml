@@ -3,7 +3,7 @@ name: Deploy to Prod
 on:
   push:
     branches:
-      - prod
+      - test
 
 jobs:
   deploy:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      id-token: write     # ✅ Required for GitHub OIDC auth
+      id-token: write  
       contents: read
 
     steps:
@@ -24,13 +24,13 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_PROD }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TEST }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Deploy Auth Stack
         env:
-          ACCOUNT_ID: "513691871442"
+          ACCOUNT_ID: "007326679429"
           CI: true      
         run: |
-          chmod +x ./deploy-assistants.sh ./zip-all-lambdas.sh
-          ./deploy-assistants.sh prod
+          chmod +x ./deploy-job-offer-admin.sh ./zip-all-lambdas.sh
+          ./deploy-job-offer-admin.sh test
