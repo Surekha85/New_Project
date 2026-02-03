@@ -11,6 +11,26 @@ Parameters:
     Type: String
     Default: "Version1"
     Description: Version to force API Gateway redeployment
+  
+  CandidatesTableName:
+    Type: String
+    Description: "Candidates table (from Candidates account)"
+
+  AssistantsTableName:
+    Type: String
+    Description: "Assistants table (from Assistants account)"
+
+  JobApplicationsTableName:
+    Type: String
+
+  PortfolioTableName:
+    Type: String
+
+  GitHubActivitiesTableName:
+    Type: String
+
+  LinkedInActivitiesTableName:
+    Type: String
 
 Resources:
   ########################################
@@ -114,9 +134,7 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
           
-          ASSISTANTS: 
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/create_assistants_lambda.zip
 
   GetAllAssistantsLambda:
@@ -133,9 +151,7 @@ Resources:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
-          ASSISTANTS:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/get_all_assistants_lambda.zip
   
   GetAssistantByIdLambda:
@@ -152,9 +168,7 @@ Resources:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
-          ASSISTANTS:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/get_assistant_by_id_lambda.zip
 
   GetAllCandidatesLambda:
@@ -175,29 +189,17 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
 
-          CANDIDATES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-CandidatesTableName
+          CANDIDATES_TABLE: !Ref CandidatesTableName
 
-          ASSISTANTS_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          ASSISTANTS_TABLE: !Ref AssistantsTableName
 
-          JOB_APPLICATIONS_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-JobApplicationsTableName
+          JOB_APPLICATIONS_TABLE: !Ref JobApplicationsTableName
 
-          PORTFOLIO_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-PortfolioTableName
+          PORTFOLIO_TABLE: !Ref PortfolioTableName
 
-          GITHUB_ACTIVITIES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-GitHubActivitiesTableName
+          GITHUB_ACTIVITIES_TABLE: !Ref GitHubActivitiesTableName
 
-          LINKEDIN_ACTIVITIES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-LinkedInActivitiesTableName
+          LINKEDIN_ACTIVITIES_TABLE: !Ref LinkedInActivitiesTableName
       Code: ../lambdas/get_all_candidates_lambda.zip
 
   
@@ -218,29 +220,17 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
           
-          CANDIDATES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-CandidatesTableName
+          CANDIDATES_TABLE: !Ref CandidatesTableName
 
-          ASSISTANTS_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          ASSISTANTS_TABLE: !Ref AssistantsTableName
 
-          JOB_APPLICATIONS_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-JobApplicationsTableName
+          JOB_APPLICATIONS_TABLE: !Ref JobApplicationsTableName
 
-          PORTFOLIO_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-PortfolioTableName
+          PORTFOLIO_TABLE: !Ref PortfolioTableName
 
-          GITHUB_ACTIVITIES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-GitHubActivitiesTableName
+          GITHUB_ACTIVITIES_TABLE: !Ref GitHubActivitiesTableName
 
-          LINKEDIN_ACTIVITIES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-LinkedInActivitiesTableName
+          LINKEDIN_ACTIVITIES_TABLE: !Ref LinkedInActivitiesTableName
       Code: ../lambdas/get_candidate_profile_by_id_lambda.zip
 
   AssignAssistantForCandidateLambda:
@@ -262,12 +252,8 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN:
             !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
           
-          CANDIDATES_TABLE:
-            Fn::ImportValue:
-              Fn::Sub: jobsyme-${Stage}-CandidatesTableName
-          ASSISTANTS:
-              Fn::ImportValue:
-                Fn::Sub: jobsyme-${Stage}-AssistantsTableName
+          CANDIDATES_TABLE: !Ref CandidatesTableName
+          ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/assign_assistant_for_candidate_lambda.zip
 
 

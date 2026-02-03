@@ -1,11 +1,10 @@
 #!/bin/bash
-
 set -e
 
 STAGE=$1
 
 if [ -z "$STAGE" ]; then
-  echo "❌ Usage: ./deploy-job-offer.sh alpha"
+  echo "❌ Usage: ./deploy-job-offer-admin.sh alpha"
   exit 1
 fi
 
@@ -21,6 +20,13 @@ case "$STAGE" in
     ;;
 esac
 
+# DynamoDB table names (stage-safe)
+CANDIDATES_TABLE="jobsyme-${STAGE}-candidates"
+ASSISTANTS_TABLE="jobsyme-${STAGE}-assistants"
+JOB_APPLICATIONS_TABLE="jobsyme-${STAGE}-job-applications"
+PORTFOLIO_TABLE="jobsyme-${STAGE}-portfolio"
+GITHUB_TABLE="jobsyme-${STAGE}-github-activities"
+LINKEDIN_TABLE="jobsyme-${STAGE}-linkedin-activities"
 
 STACK_NAME="admin-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
@@ -63,7 +69,9 @@ echo "🚀 Deploying stack: $STACK_NAME..."
 aws_cmd cloudformation deploy \
   --template-file "$PACKAGED_TEMPLATE" \
   --stack-name "$STACK_NAME" \
-  --parameter-overrides Stage="$STAGE" AdminApiDeploymentVersion="$VERSION"\
+  --parameter-overrides \
+    Stage="$STAGE" \
+    AdminApiDeploymentVersion="$VERSION" \
   --capabilities CAPABILITY_NAMED_IAM \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION" || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
