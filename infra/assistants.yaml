@@ -31,6 +31,14 @@ Parameters:
 
   LinkedInActivitiesTableName:
     Type: String
+  
+  CandidateCrossAccountRoleArn:
+    Type: String
+    Description: "Cross-account IAM role ARN from Candidate account"
+
+  AssistantCrossAccountRoleArn:
+    Type: String
+    Description: "Cross-account IAM role ARN from Assistant account"
 
 Resources:
   ########################################
@@ -77,10 +85,8 @@ Resources:
               - Effect: Allow
                 Action: sts:AssumeRole
                 Resource:
-                - Fn::ImportValue:
-                    Fn::Sub: jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
-                - Fn::ImportValue:
-                    Fn::Sub: jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+                  - !Ref CandidateCrossAccountRoleArn
+                  - !Ref AssistantCrossAccountRoleArn
 
         - PolicyName: AdminCustomAccess
           PolicyDocument:
@@ -131,9 +137,7 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
-          
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/create_assistants_lambda.zip
 
@@ -149,8 +153,8 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
+          
           ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/get_all_assistants_lambda.zip
   
@@ -166,8 +170,8 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
+         
           ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/get_assistant_by_id_lambda.zip
 
@@ -183,11 +187,8 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          CANDIDATE_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
-          
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
 
           CANDIDATES_TABLE: !Ref CandidatesTableName
 
@@ -215,10 +216,8 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
-          CANDIDATE_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           
           CANDIDATES_TABLE: !Ref CandidatesTableName
 
@@ -246,11 +245,8 @@ Resources:
       Environment:
         Variables:
           # 🔐 ONE role for ALL cross-account tables
-          CANDIDATE_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-candidates-${Stage}-CrossAccountDynamoRoleArn
-          
-          ASSISTANT_DYNAMO_ROLE_ARN:
-            !ImportValue jobsyme-assistants-${Stage}-CrossAccountAccessRoleArn
+          CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
+          ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           
           CANDIDATES_TABLE: !Ref CandidatesTableName
           ASSISTANTS: !Ref AssistantsTableName

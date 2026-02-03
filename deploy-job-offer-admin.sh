@@ -20,14 +20,6 @@ case "$STAGE" in
     ;;
 esac
 
-# DynamoDB table names (stage-safe)
-CandidatesTableName="jobsyme-${STAGE}-candidates"
-AssistantsTableName="jobsyme-${STAGE}-assistants"
-JobApplicationsTableName="jobsyme-${STAGE}-job-applications"
-PortfolioTableName="jobsyme-${STAGE}-portfolio"
-GitHubActivitiesTableName="jobsyme-${STAGE}-github-activities"
-LinkedInActivitiesTableName="jobsyme-${STAGE}-linkedin-activities"
-
 STACK_NAME="admin-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
 S3_BUCKET="admin-infra-${STAGE}"
@@ -66,18 +58,19 @@ aws_cmd cloudformation package \
 VERSION=$(date +"%d/%m/%Y %H:%M")
 # 🚀 Step 5: Deploy the packaged stack
 echo "🚀 Deploying stack: $STACK_NAME..."
-aws_cmd cloudformation deploy \
+aws cloudformation deploy \
   --template-file "$PACKAGED_TEMPLATE" \
   --stack-name "$STACK_NAME" \
   --parameter-overrides \
     Stage="$STAGE" \
-    AdminApiDeploymentVersion="$VERSION" \
-    CandidatesTableName="$CANDIDATES_TABLE" \
-    AssistantsTableName="$ASSISTANTS_TABLE" \
-    GitHubActivitiesTableName="$GITHUB_TABLE" \
-    PortfolioTableName="$PORTFOLIO_TABLE" \
-    LinkedInActivitiesTableName="$LINKEDIN_TABLE" \
-    JobApplicationsTableName="$JOB_APPLICATIONS_TABLE" \
+    CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-$STAGE-CrossAccountDynamoRole \
+    AssistantCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-assistants-$STAGE-CrossAccountAccessRole \
+    CandidatesTableName=jobsyme-$STAGE-candidates \
+    AssistantsTableName=jobsyme-$STAGE-assistants \
+    JobApplicationsTableName=jobsyme-$STAGE-job-applications \
+    PortfolioTableName=jobsyme-$STAGE-portfolio \
+    GitHubActivitiesTableName=jobsyme-$STAGE-github-activities \
+    LinkedInActivitiesTableName=jobsyme-$STAGE-linkedin-activities \
   --capabilities CAPABILITY_NAMED_IAM \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION"  || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
