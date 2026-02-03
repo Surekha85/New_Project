@@ -3,7 +3,7 @@ name: Deploy to Prod
 on:
   push:
     branches:
-      - alpha
+      - test
 
 jobs:
   deploy:
