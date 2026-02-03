@@ -64,7 +64,9 @@ Resources:
     Properties:
       RoleName: !Sub "jobsyme-${Stage}-AdminPortalLambdaRole"
 
-      # TRUST POLICY (WHO can assume this role)
+      # ============================
+      # TRUST POLICY (WHO can assume)
+      # ============================
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -73,12 +75,19 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
 
+      # ============================
+      # AWS MANAGED POLICIES
+      # ============================
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-      # PERMISSION POLICIES (WHAT this role can do)
+      # ============================
+      # INLINE PERMISSION POLICIES
+      # ============================
       Policies:
-        - PolicyName: AdminAssumeCandidateRole
+
+        # 🔐 Allow Admin Lambda to assume cross-account roles
+        - PolicyName: AdminAssumeCrossAccountRoles
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -88,16 +97,20 @@ Resources:
                   - !Ref CandidateCrossAccountRoleArn
                   - !Ref AssistantCrossAccountRoleArn
 
-        - PolicyName: AdminCustomAccess
+        # 🗂️ Admin account–local permissions only
+        - PolicyName: AdminLocalAccess
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+
+              # S3 access (admin-owned buckets only)
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:PutObject
                 Resource: "*"
 
+              # Admin account DynamoDB table ONLY
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
@@ -105,6 +118,7 @@ Resources:
                   - dynamodb:Query
                 Resource:
                   - !GetAtt AdminsTable.Arn
+
 
 
   ############################################################
