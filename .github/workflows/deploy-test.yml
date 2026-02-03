@@ -3,7 +3,7 @@ name: Deploy to Prod
 on:
   push:
     branches:
-      - test
+      - alpha
 
 jobs:
   deploy:
@@ -33,4 +33,4 @@ jobs:
           CI: true      
         run: |
           chmod +x ./deploy-job-offer-admin.sh ./zip-all-lambdas.sh
-          ./deploy-job-offer-admin.sh test
+          ./deploy-job-offer-admin.sh alpha
