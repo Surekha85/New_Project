@@ -72,9 +72,15 @@ aws_cmd cloudformation deploy \
   --parameter-overrides \
     Stage="$STAGE" \
     AdminApiDeploymentVersion="$VERSION" \
+    CandidatesTableName="$CANDIDATES_TABLE" \
+    AssistantsTableName="$ASSISTANTS_TABLE" \
+    GitHubActivitiesTableName="$GITHUB_TABLE" \
+    PortfolioTableName="$PORTFOLIO_TABLE" \
+    LinkedInActivitiesTableName="$LINKEDIN_TABLE" \
+    JobApplicationsTableName="$JOB_APPLICATIONS_TABLE" \
   --capabilities CAPABILITY_NAMED_IAM \
   --s3-bucket "$S3_BUCKET" \
-  --region "$REGION" || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
+  --region "$REGION"  || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
 
  echo "Deployed at $VERSION" 
 # 🧹 Step 6: Clean up
