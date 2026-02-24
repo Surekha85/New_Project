@@ -53,9 +53,18 @@ Resources:
       AttributeDefinitions:
         - AttributeName: adminId
           AttributeType: S
+        - AttributeName: email
+          AttributeType: S
       KeySchema:
         - AttributeName: adminId
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: email-index
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
 
   ############################################################
   # IAM
@@ -119,6 +128,10 @@ Resources:
                   - dynamodb:Query
                 Resource:
                   - !GetAtt AdminsTable.Arn
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/admin/jwt-secret*"
 
 
 
@@ -138,6 +151,10 @@ Resources:
       Environment:
         Variables:
           ADMINS_TABLE: !Ref AdminsTable
+          # JWT secret name in Secrets Manager
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
+          # Stage (prod/beta/gamma)
+          STAGE: !Ref Stage
       Code: ../lambdas/admin_login_logout_lambda.zip
 
   CreateAssistantsLambda:
