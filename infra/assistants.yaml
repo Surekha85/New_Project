@@ -128,6 +128,7 @@ Resources:
                   - dynamodb:Query
                 Resource:
                   - !GetAtt AdminsTable.Arn
+                  - !Sub "${AdminsTable.Arn}/index/*"
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
