@@ -3,6 +3,7 @@ import json
 import uuid
 import boto3
 import bcrypt
+import re
 from datetime import datetime
 from jsonschema import Draft7Validator, FormatChecker
 from boto3.dynamodb.conditions import Key
@@ -53,6 +54,35 @@ def validate_json(body):
     ]
     if errors:
         return False, errors
+    return True, None
+
+# ---------------------------------------------------
+# Validate Password Strength
+# ---------------------------------------------------
+def validate_password_strength(password):
+    """
+    Validate password meets security requirements:
+    - At least 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one number
+    - At least one special character
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+    
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+    
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one number"
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "Password must contain at least one special character (!@#$%^&*(),.?\":{}|<>)"
+    
     return True, None
 
 # ---------------------------------------------------
@@ -158,6 +188,17 @@ def handler(event, context):
                 "statusCode": 400,
                 "headers": cors,
                 "body": json.dumps({"errors": errors})
+            }
+
+        # -----------------------------------------
+        # Validate Password Strength
+        # -----------------------------------------
+        is_valid_password, password_error = validate_password_strength(body["password"])
+        if not is_valid_password:
+            return {
+                "statusCode": 400,
+                "headers": cors,
+                "body": json.dumps({"message": password_error})
             }
 
         # -----------------------------------------
