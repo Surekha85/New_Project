@@ -137,10 +137,6 @@ def handle_logout(event, body, cors_headers):
         return error_response(401, token_result['error'], cors_headers)
 
     assistant_id = token_result['data']['adminId']
-    
-    # Add token to blacklist in DynamoDB (optional - for token invalidation)
-    blacklist_token(token, token_result['data']['exp'])
-
     logger.info(f"Admin logout successful: {assistant_id}")
     return {
         'statusCode': 200,
@@ -242,27 +238,6 @@ def verify_jwt_token(token):
         return {'success': False, 'error': f'Invalid token: {str(e)}'}
     except Exception as e:
         return {'success': False, 'error': f"Error verifying token: {str(e)}"}
-
-def blacklist_token(token, exp_timestamp):
-    """Add token to blacklist (optional - for immediate logout)"""
-    try:
-        table_name = os.getenv('TOKEN_BLACKLIST_TABLE')
-        if not table_name:
-            logger.warning("Token blacklist table not configured, skipping blacklist")
-            return
-
-        ttl = int(exp_timestamp) - int(datetime.utcnow().timestamp())
-        if ttl > 0:
-            dynamodb.put_item(
-                TableName=table_name,
-                Item={
-                    'token': {'S': token},
-                    'ttl': {'N': str(int(exp_timestamp))},
-                    'createdAt': {'S': datetime.utcnow().isoformat()}
-                }
-            )
-    except Exception as e:
-        logger.warning(f"Failed to blacklist token: {str(e)}")
 
 def get_jwt_secret():
     secret_name = os.getenv('JWT_SECRET_NAME')

@@ -172,6 +172,8 @@ Resources:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           ASSISTANTS: !Ref AssistantsTableName
+          CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
+          CANDIDATES_TABLE: !Ref CandidatesTableName
       Code: ../lambdas/create_assistants_lambda.zip
 
   GetAllAssistantsLambda:
