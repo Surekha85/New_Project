@@ -117,9 +117,9 @@ def build_assistant_item(body):
     now = datetime.utcnow().isoformat() + "Z"
 
     hashed_password = bcrypt.hashpw(
-        body["password"].encode(),
+        body["password"].encode("utf-8"),
         bcrypt.gensalt()
-    ).decode()
+    ).decode("utf-8")
 
     return {
         "assistantId": str(uuid.uuid4()),
