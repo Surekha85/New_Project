@@ -59,8 +59,8 @@ def validate_json(body):
 # Assume Cross Account Role
 # ---------------------------------------------------
 def get_cross_account_table():
-    role_arn = os.environ["ASSISTANT_CROSS_ACCOUNT_ROLE_ARN"]
-    table_name = os.environ["ASSISTANTS_TABLE_NAME"]
+    role_arn = os.environ["ASSISTANT_DYNAMO_ROLE_ARN"]
+    table_name = os.environ["ASSISTANTS_TABLE"]
 
     sts = boto3.client("sts")
 
