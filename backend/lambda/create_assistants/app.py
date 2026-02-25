@@ -171,7 +171,7 @@ def handler(event, context):
         # Check Email Uniqueness (GSI)
         # -----------------------------------------
         existing = assistants_table.query(
-            IndexName="EmailIndex",
+            IndexName="email-index",
             KeyConditionExpression=Key("email").eq(email)
         )
 
