@@ -138,7 +138,22 @@ Resources:
 
   ############################################################
   # Lambdas
-  ############################################################  
+  ############################################################ 
+  CreateAdminsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "jobsyme-${Stage}-admin-create-admin"
+      Description: "Create new admin user"
+      Runtime: python3.10
+      Handler: app.handler
+      Timeout: 15
+      MemorySize: 128
+      Role: !GetAtt AdminPortalLambdaRole.Arn
+      Environment:
+        Variables:
+          ADMINS_TABLE: !Ref AdminsTable
+      Code: ../lambdas/create_admins_lambda.zip
+
   AdminLoginLogoutLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -309,6 +324,13 @@ Resources:
       PathPart: "admin"
       RestApiId: !Ref AdminPortalApi
   
+  CreateAdminsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AdminResource
+      PathPart: "create-admin"
+      RestApiId: !Ref AdminPortalApi
+
   # admin/login-logout
   AdminLoginLogoutResource:
     Type: AWS::ApiGateway::Resource
@@ -369,6 +391,18 @@ Resources:
   ############################################################
   # API Methods
   ############################################################  
+  CreateAdminsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CreateAdminsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateAdminsLambda.Arn}/invocations"
+
   # POST/admin/login-logout
   AdminLoginLogoutMethod:
     Type: AWS::ApiGateway::Method
@@ -485,7 +519,32 @@ Resources:
             method.response.header.Access-Control-Allow-Credentials: true
 
 
-  
+  CreateAdminsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref CreateAdminsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
   AdminLoginLogoutOptionsMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -675,6 +734,14 @@ Resources:
   ############################################################
   # Lambda Permissions for API Gateway
   ############################################################
+  CreateAdminsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CreateAdminsLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/POST/admin/create-admin"
+
   AdminLoginLogoutLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -769,6 +836,7 @@ Resources:
       Description: !Sub "Admin Portal API deployment at ${AdminApiDeploymentVersion}"
     DependsOn:
     # Lambda-backed methods
+      - CreateAdminsMethod
       - AdminLoginLogoutMethod
       - CreateAssistantMethod
       - GetAssistantsMethod
@@ -777,6 +845,7 @@ Resources:
       - GetCandidateProfileByIdMethod
       - AssignAssistantForCandidateMethod
       # OPTIONS (CORS) methods
+      - AdminOptionsMethod
       - AdminLoginLogoutOptionsMethod
       - CreateAssistantsOptionsMethod
       - GetAllAssistantsOptionsMethod
@@ -784,6 +853,16 @@ Resources:
       - GetAllCandidatesOptionsMethod
       - CandidateProfileByIdOptionsMethod
       - AdminAssignsAssistantOptionsMethod
+      # Permission
+      - CreateAdminsLambdaPermission
+      - AdminLoginLogoutLambdaPermission
+      - CreateAssistantsLambdaPermission
+      - GetAllAssistantsLambdaPermission
+      - GetAssistantByIdLambdaPermission
+      - GetAllCandidatesLambdaPermission
+      - GetCandidateProfileByIdLambdaPermission
+      - AssignAssistantForCandidateLambdaPermission
+
 
 
 Outputs:
@@ -804,6 +883,10 @@ Outputs:
   AdminsTableName:
     Description: "DynamoDB table for admins"
     Value: !Ref AdminsTable
+
+  CreateAdminsLambdaArn:
+    Description: "ARN of the Create Admins Lambda function"
+    Value: !GetAtt CreateAdminsLambda.Arn
 
   # IAM Role
   AdminPortalLambdaRoleName:
