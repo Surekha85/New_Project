@@ -118,25 +118,37 @@ def validate_password_strength(password):
 # Assume Cross Account Role
 # ---------------------------------------------------
 def get_cross_account_table():
+    # Get Role ARN from environment variable.
+    # This is the IAM role in another AWS account that we want to assume
+    # in order to access its DynamoDB table.
     role_arn = os.environ["ASSISTANT_DYNAMO_ROLE_ARN"]
     table_name = os.environ["ASSISTANTS_TABLE"]
 
+    # Create an STS (Security Token Service) client.
+    # STS is used to assume roles and get temporary credentials.
     sts = boto3.client("sts")
 
+    # Assume the IAM role in the target account.
+    # This returns temporary security credentials that allow us
+    # to access resources in that other AWS account.
     response = sts.assume_role(
-        RoleArn=role_arn,
-        RoleSessionName="AdminCreateAssistantSession"
+        RoleArn=role_arn,  # IAM Role to assume (target account role)
+        RoleSessionName="AdminCreateAssistantSession"    # A name for this temporary session
     )
 
+    # Extract temporary credentials returned by STS
     credentials = response["Credentials"]
-
+    # Create a DynamoDB resource using the temporary credentials.
+    # These credentials now have the permissions of the assumed role.
     dynamodb = boto3.resource(
         "dynamodb",
-        aws_access_key_id=credentials["AccessKeyId"],
-        aws_secret_access_key=credentials["SecretAccessKey"],
-        aws_session_token=credentials["SessionToken"],
+        aws_access_key_id=credentials["AccessKeyId"],  # Temporary Access Key
+        aws_secret_access_key=credentials["SecretAccessKey"],   # Temporary Secret Key
+        aws_session_token=credentials["SessionToken"], # Temporary Session Token
     )
-
+    
+    # Return the DynamoDB table object from the target account.
+    # Now we can perform operations like put_item, get_item, query, scan, etc.
     return dynamodb.Table(table_name)
 
 # ---------------------------------------------------
@@ -292,12 +304,12 @@ def handler(event, context):
 
 
 
-{
-  "httpMethod": "POST",
-  "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
-  "requestContext": {
-    "authorizer": {
-      "principalId": "admin-1234"
-    }
-  }
-}
+# {
+#   "httpMethod": "POST",
+#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
+#   "requestContext": {
+#     "authorizer": {
+#       "principalId": "admin-1234"
+#     }
+#   }
+# }
