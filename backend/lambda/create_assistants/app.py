@@ -256,3 +256,15 @@ def handler(event, context):
                 "error": str(e)
             })
         }
+
+
+
+# {
+#   "httpMethod": "POST",
+#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
+#   "requestContext": {
+#     "authorizer": {
+#       "principalId": "admin-1234"
+#     }
+#   }
+# }
