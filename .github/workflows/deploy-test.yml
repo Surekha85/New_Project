@@ -29,7 +29,7 @@ jobs:
 
       - name: Deploy Auth Stack
         env:
-          ACCOUNT_ID: "007326679429"
+          ACCOUNT_ID: "513691871442"
           CI: true      
         run: |
           chmod +x ./deploy-job-offer-admin.sh ./zip-all-lambdas.sh

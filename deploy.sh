@@ -11,7 +11,7 @@ fi
 
 case "$STAGE" in
   alpha)
-    ACCOUNT_ID="007326679429"
+    ACCOUNT_ID="513691871442"
     REGION="us-east-1"
     PROFILE="alpha"
     ;;
