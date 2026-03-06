@@ -13,15 +13,7 @@ from botocore.exceptions import ClientError
 # CORS
 # ---------------------------------------------------
 def get_cors_headers():
-    stage = os.getenv("STAGE", "prod").lower()
-
-    if stage == "beta":
-        origin = "https://beta.jobsyme.com"
-    elif stage == "gamma":
-        origin = "https://gamma.jobsyme.com"
-    else:
-        origin = "https://www.jobsyme.com"
-
+    origin = "https://www.admin.jobsyme.com"
     return {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
@@ -39,7 +31,11 @@ assistant_schema = {
         "first_name": {"type": "string"},
         "last_name": {"type": "string"},
         "email": {"type": "string", "format": "email"},
-        "password": {"type": "string"}
+        "password": {"type": "string"},
+        "assgined_candidates": {
+            "type": "array",
+            "items": {"type": "string"}
+        }
     }
 }
 
