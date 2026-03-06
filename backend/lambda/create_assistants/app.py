@@ -43,14 +43,47 @@ assistant_schema = {
 # Validate JSON
 # ---------------------------------------------------
 def validate_json(body):
-    validator = Draft7Validator(assistant_schema, format_checker=FormatChecker())
+
+    validator = Draft7Validator(
+        assistant_schema,
+        format_checker=FormatChecker()
+    )
+
     errors = [
         f"{'/'.join([str(x) for x in e.path]) or 'root'}: {e.message}"
         for e in validator.iter_errors(body)
     ]
+
+    # Empty field check
+    errors += check_empty_fields(body)
+
     if errors:
         return False, errors
+
     return True, None
+
+
+def check_empty_fields(obj, path=""):
+    errors = []
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            sub_path = f"{path}/{k}" if path else k
+            errors += check_empty_fields(v, sub_path)
+
+    elif isinstance(obj, list):
+        if not obj:
+            errors.append(f"{path} cannot be empty")
+        else:
+            for i, item in enumerate(obj):
+                sub_path = f"{path}[{i}]"
+                errors += check_empty_fields(item, sub_path)
+
+    else:
+        if obj is None or (isinstance(obj, str) and not obj.strip()):
+            errors.append(f"{path} cannot be empty")
+
+    return errors
 
 # ---------------------------------------------------
 # Validate Password Strength
@@ -259,12 +292,12 @@ def handler(event, context):
 
 
 
-# {
-#   "httpMethod": "POST",
-#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
-#   "requestContext": {
-#     "authorizer": {
-#       "principalId": "admin-1234"
-#     }
-#   }
-# }
+{
+  "httpMethod": "POST",
+  "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
+  "requestContext": {
+    "authorizer": {
+      "principalId": "admin-1234"
+    }
+  }
+}
