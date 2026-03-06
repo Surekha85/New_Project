@@ -22,7 +22,7 @@ esac
 
 STACK_NAME="admin-portal-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
-S3_BUCKET="admin-infra-${STAGE}"
+S3_BUCKET="admin-portal-infra-${STAGE}"
 S3_PREFIX="admin/$STAGE"
 PACKAGED_TEMPLATE=".packaged-auth-template.yaml"
 
