@@ -20,7 +20,7 @@ case "$STAGE" in
     ;;
 esac
 
-STACK_NAME="admin-${STAGE}"
+STACK_NAME="admin-portal-${STAGE}"
 FINAL_TEMPLATE="infra/assistants.yaml"
 S3_BUCKET="admin-infra-${STAGE}"
 S3_PREFIX="admin/$STAGE"
