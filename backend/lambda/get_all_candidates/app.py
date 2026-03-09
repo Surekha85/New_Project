@@ -4,7 +4,6 @@ import boto3
 import jwt
 from decimal import Decimal
 from datetime import datetime, timezone
-from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 # ---------------------------------------------------
@@ -28,7 +27,7 @@ def get_cors_headers():
 
 
 # ---------------------------------------------------
-# GET JWT SECRET
+# GET JWT SECRET (CACHED)
 # ---------------------------------------------------
 def get_jwt_secret():
 
@@ -119,19 +118,16 @@ def get_cross_account_table(role_env, table_env):
 
 
 # ---------------------------------------------------
-# Get Active Candidate IDs using GSI
+# GET ACTIVE CANDIDATE IDS (SCAN)
 # ---------------------------------------------------
 def get_active_candidate_ids(payments_table):
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc)
 
     candidate_ids = []
 
-    response = payments_table.query(
-        IndexName="SubscriptionStatusIndex",
-        KeyConditionExpression=
-        Key("subscription_status").eq("active") &
-        Key("subscription_period_end").gte(now)
+    response = payments_table.scan(
+        ProjectionExpression="jaa_candidate_id, subscription"
     )
 
     while True:
@@ -140,19 +136,30 @@ def get_active_candidate_ids(payments_table):
 
         for item in items:
 
-            cid = item.get("jaa_candidate_id")
+            subscription = item.get("subscription", {})
 
-            if cid:
-                candidate_ids.append(cid)
+            status = subscription.get("status")
+            end_date = subscription.get("subscription_period_end")
+
+            if status == "active" and end_date:
+
+                end_datetime = datetime.strptime(
+                    end_date,
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=timezone.utc)
+
+                if end_datetime >= now:
+
+                    cid = item.get("jaa_candidate_id")
+
+                    if cid:
+                        candidate_ids.append(cid)
 
         if "LastEvaluatedKey" not in response:
             break
 
-        response = payments_table.query(
-            IndexName="SubscriptionStatusIndex",
-            KeyConditionExpression=
-            Key("subscription_status").eq("active") &
-            Key("subscription_period_end").gte(now),
+        response = payments_table.scan(
+            ProjectionExpression="jaa_candidate_id, subscription",
             ExclusiveStartKey=response["LastEvaluatedKey"]
         )
 
@@ -160,7 +167,7 @@ def get_active_candidate_ids(payments_table):
 
 
 # ---------------------------------------------------
-# Batch Get Candidates
+# BATCH GET CANDIDATES
 # ---------------------------------------------------
 def batch_get_candidates(candidate_table, candidate_ids):
 
@@ -190,15 +197,19 @@ def batch_get_candidates(candidate_table, candidate_ids):
         items = response["Responses"].get(table_name, [])
 
         for item in items:
-            candidates.append(
-                {k: list(v.values())[0] for k, v in item.items()}
-            )
+
+            normal_item = {}
+
+            for k, v in item.items():
+                normal_item[k] = list(v.values())[0]
+
+            candidates.append(normal_item)
 
     return candidates
 
 
 # ---------------------------------------------------
-# Lambda Handler
+# LAMBDA HANDLER
 # ---------------------------------------------------
 def handler(event, context):
 
@@ -294,11 +305,14 @@ def handler(event, context):
 
 
 # ---------------------------------------------------
-# Format Candidate Response
+# FORMAT RESPONSE
 # ---------------------------------------------------
 def get_all_candidates(candidates):
+
     response = []
+
     for item in candidates:
+
         candidate = {
             "jaa_candidate_id": item.get("jaa_candidate_id"),
             "user_id": item.get("user_id"),
