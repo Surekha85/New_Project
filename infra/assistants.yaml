@@ -32,7 +32,7 @@ Parameters:
   LinkedInActivitiesTableName:
     Type: String
   
-  paymentsTableName:
+  PaymentsTableName:
     Type: String
     Description: "Payments table (from Candidate account)"
   
