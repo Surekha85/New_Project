@@ -75,7 +75,7 @@ def get_active_candidate_ids(payments_table):
                     "%Y-%m-%dT%H:%M:%SZ"
                 ).replace(tzinfo=timezone.utc)
 
-                if end_datetime > now:
+                if end_datetime >= now:
 
                     candidate_id = item.get("jaa_candidate_id")
 
