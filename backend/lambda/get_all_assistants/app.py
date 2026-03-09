@@ -158,20 +158,16 @@ def handler(event, context):
 
         assistants = []
 
-        scan_response = assistants_table.scan(
-            Limit=200
-        )
-
+        # ------------------------
+        # SCAN TABLE (ALL ITEMS, NO LIMIT)
+        # ------------------------
+        scan_response = assistants_table.scan() 
         assistants.extend(scan_response.get("Items", []))
 
-        # Pagination
         while "LastEvaluatedKey" in scan_response:
-
             scan_response = assistants_table.scan(
-                ExclusiveStartKey=scan_response["LastEvaluatedKey"],
-                Limit=200
+                ExclusiveStartKey=scan_response["LastEvaluatedKey"]
             )
-
             assistants.extend(scan_response.get("Items", []))
 
         final_response = format_assistants(assistants)
