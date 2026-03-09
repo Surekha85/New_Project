@@ -32,6 +32,10 @@ Parameters:
   LinkedInActivitiesTableName:
     Type: String
   
+  paymentsTableName:
+    Type: String
+    Description: "Payments table (from Candidate account)"
+  
   CandidateCrossAccountRoleArn:
     Type: String
     Description: "Cross-account IAM role ARN from Candidate account"
