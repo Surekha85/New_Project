@@ -1,9 +1,16 @@
 import os
 import json
 import boto3
+import jwt
 from decimal import Decimal
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+
+# ---------------------------------------------------
+# GLOBALS
+# ---------------------------------------------------
+secrets_client = boto3.client("secretsmanager")
+JWT_SECRET_CACHE = None
 
 
 # ---------------------------------------------------
@@ -17,6 +24,70 @@ def get_cors_headers():
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Credentials": "true"
     }
+
+
+# ---------------------------------------------------
+# GET JWT SECRET (CACHED)
+# ---------------------------------------------------
+def get_jwt_secret():
+
+    global JWT_SECRET_CACHE
+
+    if JWT_SECRET_CACHE:
+        return JWT_SECRET_CACHE
+
+    secret_name = os.environ["JWT_SECRET_NAME"]
+
+    response = secrets_client.get_secret_value(
+        SecretId=secret_name
+    )
+
+    secret_data = json.loads(response["SecretString"])
+
+    JWT_SECRET_CACHE = secret_data["jwt_secret"]
+
+    return JWT_SECRET_CACHE
+
+
+# ---------------------------------------------------
+# VERIFY ADMIN TOKEN
+# ---------------------------------------------------
+def verify_admin_token(event):
+
+    headers = event.get("headers", {})
+
+    auth_header = headers.get("Authorization") or headers.get("authorization")
+
+    if not auth_header:
+        return None, "Authorization header missing"
+
+    parts = auth_header.split()
+
+    if len(parts) != 2 or parts[0] != "Bearer":
+        return None, "Invalid Authorization format"
+
+    token = parts[1]
+
+    try:
+
+        jwt_secret = get_jwt_secret()
+
+        decoded = jwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"]
+        )
+
+        if decoded.get("user_type") != "admin":
+            return None, "Unauthorized user"
+
+        return decoded, None
+
+    except jwt.ExpiredSignatureError:
+        return None, "Token expired"
+
+    except jwt.InvalidTokenError:
+        return None, "Invalid token"
 
 
 # ---------------------------------------------------
@@ -109,16 +180,15 @@ def handler(event, context):
     try:
 
         # -----------------------------------------
-        # Admin Authentication
+        # VERIFY ADMIN TOKEN
         # -----------------------------------------
-        admin_id = event.get("requestContext", {}).get(
-            "authorizer", {}).get("principalId")
+        admin_data, error = verify_admin_token(event)
 
-        if not admin_id:
+        if error:
             return {
                 "statusCode": 401,
                 "headers": cors,
-                "body": json.dumps({"message": "Unauthorized"})
+                "body": json.dumps({"message": error})
             }
 
         # -----------------------------------------

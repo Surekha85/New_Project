@@ -1,3 +1,4 @@
 boto3
 jsonschema==4.26.0
 bcrypt==4.1.2
+PyJWT==2.8.0

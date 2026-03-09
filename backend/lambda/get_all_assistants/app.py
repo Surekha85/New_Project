@@ -1,10 +1,18 @@
 import os
 import json
 import boto3
-from datetime import datetime
+import jwt
 from decimal import Decimal
-from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+
+# ---------------------------------------------------
+# GLOBALS
+# ---------------------------------------------------
+secrets_client = boto3.client("secretsmanager")
+sts_client = boto3.client("sts")
+
+JWT_SECRET_CACHE = None
+
 
 # ---------------------------------------------------
 # CORS
@@ -14,13 +22,69 @@ def get_cors_headers():
     return {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-        "Access-Control-Allow-Methods": "POST,OPTIONS",
+        "Access-Control-Allow-Methods": "GET,OPTIONS",
         "Access-Control-Allow-Credentials": "true"
     }
 
 
 # ---------------------------------------------------
-# Assume Cross Account Role
+# GET JWT SECRET (CACHED)
+# ---------------------------------------------------
+def get_jwt_secret():
+    global JWT_SECRET_CACHE
+
+    if JWT_SECRET_CACHE:
+        return JWT_SECRET_CACHE
+
+    secret_name = os.environ["JWT_SECRET_NAME"]
+
+    response = secrets_client.get_secret_value(
+        SecretId=secret_name
+    )
+
+    secret_data = json.loads(response["SecretString"])
+
+    JWT_SECRET_CACHE = secret_data["jwt_secret"]
+
+    return JWT_SECRET_CACHE
+
+
+# ---------------------------------------------------
+# VERIFY ADMIN TOKEN
+# ---------------------------------------------------
+def verify_admin_token(event):
+
+    headers = event.get("headers", {})
+    auth_header = headers.get("Authorization") or headers.get("authorization")
+
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None, "Missing or invalid Authorization header"
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        jwt_secret = get_jwt_secret()
+
+        decoded = jwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"]
+        )
+
+        if decoded.get("user_type") != "admin":
+            return None, "Unauthorized user"
+
+        return decoded, None
+
+    except jwt.ExpiredSignatureError:
+        return None, "Token expired"
+
+    except jwt.InvalidTokenError:
+        return None, "Invalid token"
+
+
+# ---------------------------------------------------
+# ASSUME CROSS ACCOUNT ROLE
 # ---------------------------------------------------
 def get_cross_account_table():
     # Get Role ARN from environment variable.
@@ -72,20 +136,23 @@ def handler(event, context):
         }
 
     try:
-        # -----------------------------------------
-        # Admin Authentication (Authorizer)
-        # -----------------------------------------
-        admin_id = event.get("requestContext", {}).get("authorizer", {}).get("principalId")
 
-        if not admin_id:
+        # -----------------------------------------
+        # ADMIN AUTHENTICATION
+        # -----------------------------------------
+        admin_data, error = verify_admin_token(event)
+
+        if error:
             return {
                 "statusCode": 401,
                 "headers": cors,
-                "body": json.dumps({"message": "Unauthorized"})
+                "body": json.dumps({"message": error})
             }
 
+        admin_id = admin_data["adminId"]
+
         # -----------------------------------------
-        # Get Cross Account Table
+        # GET CROSS ACCOUNT TABLE
         # -----------------------------------------
         assistants_table = get_cross_account_table()
 
@@ -97,22 +164,25 @@ def handler(event, context):
 
         assistants.extend(scan_response.get("Items", []))
 
-        # Pagination handle
+        # Pagination
         while "LastEvaluatedKey" in scan_response:
+
             scan_response = assistants_table.scan(
                 ExclusiveStartKey=scan_response["LastEvaluatedKey"],
-                Limit=100
+                Limit=200
             )
+
             assistants.extend(scan_response.get("Items", []))
 
-        final_response = get_all_assistansts(assistants)
+        final_response = format_assistants(assistants)
+
         return {
             "statusCode": 200,
             "headers": cors,
             "body": json.dumps({
                 "message": "Assistants fetched successfully",
-                "count": len(assistants),
-                "assistants": convert(final_response)
+                "count": len(final_response),
+                "assistants": convert_decimal(final_response)
             })
         }
 
@@ -137,9 +207,15 @@ def handler(event, context):
         }
 
 
-def get_all_assistansts(assistants):
+# ---------------------------------------------------
+# FORMAT ASSISTANTS
+# ---------------------------------------------------
+def format_assistants(assistants):
+
     response = []
-    for assistant in assistants:    
+
+    for assistant in assistants:
+
         response.append({
             "assistantId": assistant["assistantId"],
             "first_name": assistant["first_name"],
@@ -153,11 +229,18 @@ def get_all_assistansts(assistants):
     return response
 
 
-def convert(obj):
-        if isinstance(obj, list):
-            return [convert(i) for i in obj]
-        elif isinstance(obj, dict):
-            return {k: convert(v) for k, v in obj.items()}
-        elif isinstance(obj, Decimal):
-            return int(obj) if obj % 1 == 0 else float(obj)
-        return obj
+# ---------------------------------------------------
+# DECIMAL CONVERTER
+# ---------------------------------------------------
+def convert_decimal(obj):
+
+    if isinstance(obj, list):
+        return [convert_decimal(i) for i in obj]
+
+    elif isinstance(obj, dict):
+        return {k: convert_decimal(v) for k, v in obj.items()}
+
+    elif isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+
+    return obj

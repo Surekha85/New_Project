@@ -1,8 +1,8 @@
 import json
 import boto3
-import hashlib
 import jwt
 import re
+import bcrypt
 import os
 import logging
 from datetime import datetime, timedelta
@@ -16,13 +16,12 @@ logger.setLevel(logging.INFO)
 dynamodb = boto3.client('dynamodb')
 secrets_client = boto3.client('secretsmanager')
 
+JWT_SECRET_CACHE = None
+
+
 def get_cors_headers():
     """Return CORS headers based on stage"""
-    stage = os.getenv('STAGE', 'prod').lower()
-    origin = {
-        'beta': 'https://beta.jobsyme.com',
-        'gamma': 'https://gamma.jobsyme.com'
-    }.get(stage, 'https://www.jobsyme.com')
+    origin = "https://www.admin.jobsyme.com"
 
     return {
         'Access-Control-Allow-Origin': origin,
@@ -32,7 +31,7 @@ def get_cors_headers():
     }
 
 def handler(event, context):
-    """Admin Portal Login/Logout Lambda"""
+    """Admin Portal Login Lambda"""
     logger.info("Admin request received")
     cors_headers = get_cors_headers()
 
@@ -49,103 +48,67 @@ def handler(event, context):
         except json.JSONDecodeError:
             return error_response(400, "Invalid JSON", cors_headers)
 
-        action = body.get('action', 'login').lower()
+        """Handle admin login"""
+        email = body.get('email', '').strip().lower()
+        password = body.get('password', '').strip()
 
-        if action == 'login':
-            return handle_login(body, cors_headers)
-        elif action == 'logout':
-            return handle_logout(event, body, cors_headers)
-        else:
-            return error_response(400, "Invalid action. Use 'login' or 'logout'", cors_headers)
+        validation_error = validate_inputs(email, password)
+        if validation_error:
+            return error_response(400, validation_error, cors_headers)
+
+        auth_result = authenticate_admin(email, password)
+        if not auth_result['success']:
+            return error_response(401, auth_result['error'], cors_headers)
+
+        admin_data = auth_result['admin']
+
+        token_result = generate_jwt_token(admin_data)
+        if not token_result['success']:
+            return error_response(500, token_result['error'], cors_headers)
+
+        logger.info(f"Admin login successful: {email}")
+        update_last_login(admin_data['adminId'])
+        return {
+            'statusCode': 200,
+            'headers': cors_headers,
+            'body': json.dumps({
+                'message': 'Login successful',
+                'token': token_result['token'],
+                'expires_in': token_result['expires_in'],
+                'user': {
+                    'adminId': admin_data['adminId'],
+                    'email': admin_data['email'],
+                    'first_name': admin_data['first_name'],
+                    'last_name': admin_data['last_name']
+                }
+            })
+        }
 
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return error_response(500, "Internal server error", cors_headers)
 
-# ---------------------- Login Handler ----------------------
 
-def handle_login(body, cors_headers):
-    """Handle admin login"""
-    email = body.get('email', '').strip().lower()
-    password = body.get('password', '').strip()
-
-    validation_error = validate_inputs(email, password)
-    if validation_error:
-        return error_response(400, validation_error, cors_headers)
-
-    auth_result = authenticate_assistant(email, password)
-    if not auth_result['success']:
-        return error_response(401, auth_result['error'], cors_headers)
-
-    assistant_data = auth_result['admin']
-
-    token_result = generate_jwt_token(assistant_data)
-    if not token_result['success']:
-        return error_response(500, token_result['error'], cors_headers)
-
-    logger.info(f"Admin login successful: {email}")
-    update_last_login(assistant_data['adminId'])
-    return {
-        'statusCode': 200,
-        'headers': cors_headers,
-        'body': json.dumps({
-            'message': 'Login successful',
-            'token': token_result['token'],
-            'expires_in': token_result['expires_in'],
-            'user': {
-                'adminId': assistant_data['adminId'],
-                'email': assistant_data['email'],
-                'first_name': assistant_data['first_name'],
-                'last_name': assistant_data['last_name']
-            }
-        })
-    }
 # ---------------------- Update Last Login ----------------------
 
-def update_last_login(assistant_id):
+def update_last_login(admin_id):
     """Update admin's last_login timestamp in DynamoDB"""
     try:
         table_name = os.getenv('ADMINS_TABLE')
         if not table_name:
-            logger.warning('Assistants table not configured for last_login update')
+            logger.warning('admins table not configured for last_login update')
             return
         dynamodb.update_item(
             TableName=table_name,
-            Key={'adminId': {'S': assistant_id}},
+            Key={'adminId': {'S': admin_id}},
             UpdateExpression='SET last_login = :ts',
             ExpressionAttributeValues={':ts': {'S': datetime.utcnow().isoformat() + 'Z'}}
         )
-        logger.info(f"Updated last_login for adminId: {assistant_id}")
+        logger.info(f"Updated last_login for adminId: {admin_id}")
     except Exception as e:
-        logger.warning(f"Failed to update last_login for adminId {assistant_id}: {str(e)}")
+        logger.warning(f"Failed to update last_login for adminId {admin_id}: {str(e)}")
 
-# ---------------------- Logout Handler ----------------------
 
-def handle_logout(event, body, cors_headers):
-    """Handle admin logout"""
-    # Get token from Authorization header
-    auth_header = event.get('headers', {}).get('Authorization', '')
-    
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return error_response(401, "Missing or invalid authorization header", cors_headers)
-
-    token = auth_header.split(' ')[1]
-    
-    # Verify and decode token
-    token_result = verify_jwt_token(token)
-    if not token_result['success']:
-        return error_response(401, token_result['error'], cors_headers)
-
-    assistant_id = token_result['data']['adminId']
-    logger.info(f"Admin logout successful: {assistant_id}")
-    return {
-        'statusCode': 200,
-        'headers': cors_headers,
-        'body': json.dumps({
-            'message': 'Logout successful',
-            'timestamp': datetime.utcnow().isoformat() + 'Z'
-        })
-    }
 
 # ---------------------- Helper Functions ----------------------
 
@@ -158,12 +121,12 @@ def validate_inputs(email, password):
         return "Password is required"
     return None
 
-def authenticate_assistant(email, password):
+def authenticate_admin(email, password):
     """Authenticate admin using DynamoDB table"""
     try:
         table_name = os.getenv('ADMINS_TABLE')
         if not table_name:
-            return {'success': False, 'error': 'Assistants table not configured'}
+            return {'success': False, 'error': 'admins table not configured'}
 
         # Query by email using GSI
         response = dynamodb.query(
@@ -177,7 +140,7 @@ def authenticate_assistant(email, password):
             return {'success': False, 'error': 'Invalid email or password'}
 
         item = response['Items'][0]
-        assistant_data = {
+        admin_data = {
             'adminId': item.get('adminId', {}).get('S', ''),
             'email': item.get('email', {}).get('S', ''),
             'password_hash': item.get('password_hash', {}).get('S', ''),
@@ -185,10 +148,10 @@ def authenticate_assistant(email, password):
             'last_name': item.get('last_name', {}).get('S', '')
         }
 
-        if not verify_password(password, assistant_data['password_hash']):
+        if not verify_password(password, admin_data['password_hash']):
             return {'success': False, 'error': 'Invalid email or password'}
 
-        return {'success': True, 'admin': assistant_data}
+        return {'success': True, 'admin': admin_data}
 
     except ClientError as e:
         return {'success': False, 'error': f"DynamoDB error: {e.response['Error']['Message']}"}
@@ -196,24 +159,31 @@ def authenticate_assistant(email, password):
         return {'success': False, 'error': f"Unexpected error: {str(e)}"}
 
 def verify_password(password, stored_hash):
-    salt = os.getenv('PASSWORD_SALT', 'jobsyme_secure_salt_2025')
-    return hashlib.sha256((salt + password).encode()).hexdigest() == stored_hash
+    try:
+        return bcrypt.checkpw(
+            password.encode('utf-8'),
+            stored_hash.encode('utf-8')
+        )
+    except Exception as e:
+        logger.error(f"Password verification error: {str(e)}")
+        return False
 
-def generate_jwt_token(assistant_data):
+
+def generate_jwt_token(admin_data):
     try:
         jwt_secret = get_jwt_secret()
         if not jwt_secret:
             return {'success': False, 'error': 'JWT secret not configured'}
 
-        expires_in_seconds = int(os.getenv('JWT_EXPIRES_IN_SECONDS', '1209600'))
+        expires_in_seconds = int(os.getenv('JWT_EXPIRES_IN_SECONDS', '86400'))
         expiration = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
 
         payload = {
-            'adminId': assistant_data['adminId'],
-            'email': assistant_data['email'],
+            'adminId': admin_data['adminId'],
+            'email': admin_data['email'],
             'user_type': 'admin',
-            'first_name': assistant_data['first_name'],
-            'last_name': assistant_data['last_name'],
+            'first_name': admin_data['first_name'],
+            'last_name': admin_data['last_name'],
             'iat': int(datetime.utcnow().timestamp()),
             'exp': int(expiration.timestamp())
         }
@@ -223,37 +193,29 @@ def generate_jwt_token(assistant_data):
     except Exception as e:
         return {'success': False, 'error': f"Error generating JWT: {str(e)}"}
 
-def verify_jwt_token(token):
-    """Verify and decode JWT token"""
-    try:
-        jwt_secret = get_jwt_secret()
-        if not jwt_secret:
-            return {'success': False, 'error': 'JWT secret not configured'}
 
-        payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])
-        return {'success': True, 'data': payload}
-    except jwt.ExpiredSignatureError:
-        return {'success': False, 'error': 'Token has expired'}
-    except jwt.InvalidTokenError as e:
-        return {'success': False, 'error': f'Invalid token: {str(e)}'}
-    except Exception as e:
-        return {'success': False, 'error': f"Error verifying token: {str(e)}"}
-
+# Fetch JWT secret from AWS Secrets Manager
 def get_jwt_secret():
+    global JWT_SECRET_CACHE
+
+    # Return cached secret if available
+    if JWT_SECRET_CACHE:
+        return JWT_SECRET_CACHE 
+
     secret_name = os.getenv('JWT_SECRET_NAME')
-    logger.info(f"JWT_SECRET_NAME env: {secret_name}")
     if not secret_name:
         logger.error("JWT_SECRET_NAME environment variable is not set.")
         return None
     try:
         response = secrets_client.get_secret_value(SecretId=secret_name)
-        logger.info(f"Secret fetch response: {response}")
         secret_data = json.loads(response['SecretString'])
-        logger.info(f"Secret data loaded: {secret_data}")
-        return secret_data.get('jwt_secret')
+        JWT_SECRET_CACHE = secret_data.get("jwt_secret")
+        return JWT_SECRET_CACHE
+
     except Exception as e:
         logger.error(f"Error fetching JWT secret: {str(e)}")
         return None
+
 
 def error_response(status_code, message, headers):
     return {
@@ -270,15 +232,4 @@ def error_response(status_code, message, headers):
 #     "Content-Type": "application/json"
 #   },
 #   "body": "{\"action\": \"login\", \"email\": \"admin@example.com\", \"password\": \"password123\"}"
-# }
-
-
-
-# {
-#   "httpMethod": "POST",
-#   "headers": {
-#     "Content-Type": "application/json",
-#     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhc3Npc3RhbnRJZCI6IjEyMyIsImVtYWlsIjoiYXNzaXN0YW50QGV4YW1wbGUuY29tIiwiZmlyc3RfbmFtZSI6IkpvaG4iLCJsYXN0X25hbWUiOiJEb2UiLCJpYXQiOjE3MDk3ODEwMDAsImV4cCI6MTcwOTc5NzQwMH0.signature"
-#   },
-#   "body": "{\"action\": \"logout\"}"
 # }

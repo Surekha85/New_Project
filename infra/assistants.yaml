@@ -189,6 +189,7 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           ASSISTANTS_TABLE: !Ref AssistantsTableName
           CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
@@ -208,7 +209,7 @@ Resources:
       Environment:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
-          
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           ASSISTANTS_TABLE: !Ref AssistantsTableName
       Code: ../lambdas/get_all_assistants_lambda.zip
   
@@ -225,7 +226,7 @@ Resources:
       Environment:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
-         
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           ASSISTANTS: !Ref AssistantsTableName
       Code: ../lambdas/get_assistant_by_id_lambda.zip
 
@@ -243,7 +244,7 @@ Resources:
         Variables:
           CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
-
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           CANDIDATES_TABLE: !Ref CandidatesTableName
           PAYMENTS_TABLE: !Ref PaymentsTableName
 
@@ -273,7 +274,7 @@ Resources:
         Variables:
           CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
-          
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           CANDIDATES_TABLE: !Ref CandidatesTableName
 
           ASSISTANTS_TABLE: !Ref AssistantsTableName
@@ -299,6 +300,7 @@ Resources:
       Role: !GetAtt AdminPortalLambdaRole.Arn
       Environment:
         Variables:
+          JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           # 🔐 ONE role for ALL cross-account tables
           CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
