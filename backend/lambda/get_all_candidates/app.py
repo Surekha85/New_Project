@@ -2,8 +2,9 @@ import os
 import json
 import boto3
 from decimal import Decimal
-from boto3.dynamodb.conditions import Key
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+
 
 # ---------------------------------------------------
 # CORS
@@ -21,49 +22,83 @@ def get_cors_headers():
 # ---------------------------------------------------
 # Assume Cross Account Role
 # ---------------------------------------------------
-def get_cross_account_table():
-    # Get Role ARN from environment variable.
-    # This is the IAM role in another AWS account that we want to assume
-    # in order to access its DynamoDB table.
-    role_arn = os.environ["CANDIDATE_DYNAMO_ROLE_ARN"]
-    table_name = os.environ["CANDIDATES_TABLE"]
+def get_cross_account_table(role_env, table_env):
 
-    # Create an STS (Security Token Service) client.
-    # STS is used to assume roles and get temporary credentials.
+    role_arn = os.environ[role_env]
+    table_name = os.environ[table_env]
+
     sts = boto3.client("sts")
 
-    # Assume the IAM role in the target account.
-    # This returns temporary security credentials that allow us
-    # to access resources in that other AWS account.
     response = sts.assume_role(
-        RoleArn=role_arn,  # IAM Role to assume (target account role)
-        RoleSessionName="AdminCreateAssistantSession"    # A name for this temporary session
+        RoleArn=role_arn,
+        RoleSessionName="AdminCreateAssistantSession"
     )
 
-    # Extract temporary credentials returned by STS
     credentials = response["Credentials"]
-    # Create a DynamoDB resource using the temporary credentials.
-    # These credentials now have the permissions of the assumed role.
+
     dynamodb = boto3.resource(
         "dynamodb",
-        aws_access_key_id=credentials["AccessKeyId"],  # Temporary Access Key
-        aws_secret_access_key=credentials["SecretAccessKey"],   # Temporary Secret Key
-        aws_session_token=credentials["SessionToken"], # Temporary Session Token
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
     )
-    
-    # Return the DynamoDB table object from the target account.
-    # Now we can perform operations like put_item, get_item, query, scan, etc.
+
     return dynamodb.Table(table_name)
 
+
+# ---------------------------------------------------
+# Get Active Subscriber Candidate IDs
+# ---------------------------------------------------
+def get_active_candidate_ids(payments_table):
+
+    now = datetime.now(timezone.utc)
+
+    candidate_ids = []
+
+    response = payments_table.scan()
+
+    while True:
+
+        items = response.get("Items", [])
+
+        for item in items:
+
+            subscription = item.get("subscription", {})
+
+            status = subscription.get("status")
+            end_date = subscription.get("subscription_period_end")
+
+            if status == "active" and end_date:
+
+                end_datetime = datetime.strptime(
+                    end_date,
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=timezone.utc)
+
+                if end_datetime > now:
+
+                    candidate_id = item.get("jaa_candidate_id")
+
+                    if candidate_id:
+                        candidate_ids.append(candidate_id)
+
+        if "LastEvaluatedKey" not in response:
+            break
+
+        response = payments_table.scan(
+            ExclusiveStartKey=response["LastEvaluatedKey"]
+        )
+
+    return candidate_ids
 
 
 # ---------------------------------------------------
 # Lambda Handler
 # ---------------------------------------------------
 def handler(event, context):
+
     cors = get_cors_headers()
 
-    # Preflight
     if event.get("httpMethod") == "OPTIONS":
         return {
             "statusCode": 200,
@@ -72,10 +107,12 @@ def handler(event, context):
         }
 
     try:
+
         # -----------------------------------------
-        # Admin Authentication (Authorizer)
+        # Admin Authentication
         # -----------------------------------------
-        admin_id = event.get("requestContext", {}).get("authorizer", {}).get("principalId")
+        admin_id = event.get("requestContext", {}).get(
+            "authorizer", {}).get("principalId")
 
         if not admin_id:
             return {
@@ -84,31 +121,52 @@ def handler(event, context):
                 "body": json.dumps({"message": "Unauthorized"})
             }
 
-        
         # -----------------------------------------
-        # Fetch All Candidates
+        # Tables
         # -----------------------------------------
-        candidate_table = get_cross_account_table()
+        payments_table = get_cross_account_table(
+            "CANDIDATE_DYNAMO_ROLE_ARN",
+            "PAYMENTS_TABLE"
+        )
+
+        candidate_table = get_cross_account_table(
+            "CANDIDATE_DYNAMO_ROLE_ARN",
+            "CANDIDATES_TABLE"
+        )
+
+        # -----------------------------------------
+        # Get Active Subscriber Candidate IDs
+        # -----------------------------------------
+        active_candidate_ids = get_active_candidate_ids(payments_table)
+
+        if not active_candidate_ids:
+            return {
+                "statusCode": 200,
+                "headers": cors,
+                "body": json.dumps({
+                    "message": "No active subscribers found",
+                    "candidates": []
+                })
+            }
+
+        # -----------------------------------------
+        # Fetch Candidates
+        # -----------------------------------------
         candidates = []
 
-        scan_response = candidate_table.scan()
-        candidates.extend(scan_response.get("Items", []))
+        for cid in active_candidate_ids:
 
-        # Pagination handling
-        while "LastEvaluatedKey" in scan_response:
-            scan_response = candidate_table.scan(
-                ExclusiveStartKey=scan_response["LastEvaluatedKey"]
+            response = candidate_table.get_item(
+                Key={"jaa_candidate_id": cid}
             )
-            candidates.extend(scan_response.get("Items", []))
 
-        if not candidates and len(candidates) == 0:
-            return {
-                "statusCode": 404,
-                "headers": cors,
-                "body": json.dumps({"message": "No candidates found"})
-            }
-        
+            item = response.get("Item")
+
+            if item:
+                candidates.append(item)
+
         final_response = get_all_candidates(candidates)
+
         return {
             "statusCode": 200,
             "headers": cors,
@@ -138,11 +196,14 @@ def handler(event, context):
             })
         }
 
+
+# ---------------------------------------------------
+# Format Candidate Response
+# ---------------------------------------------------
 def get_all_candidates(candidates):
     response = []
     for item in candidates:
         candidate = {
-            "candidate_id": item.get("candidate_id"),
             "jaa_candidate_id": item.get("jaa_candidate_id"),
             "user_id": item.get("user_id"),
             "first_name": item.get("first_name"),
@@ -152,7 +213,6 @@ def get_all_candidates(candidates):
             "github": item.get("github"),
             "linkedin": item.get("linkedin"),
             "resumeUrl": item.get("resumeUrl"),
-            "resumeFileExtension": item.get("resumeFileExtension"),
             "assistantAssignedTo": item.get("assistantAssignedTo"),
             "address": {
                 "street": item.get("address", {}).get("street"),
@@ -199,13 +259,18 @@ def get_all_candidates(candidates):
     return response
 
 
-
-
+# ---------------------------------------------------
+# Decimal Convert
+# ---------------------------------------------------
 def convert(obj):
-        if isinstance(obj, list):
-            return [convert(i) for i in obj]
-        elif isinstance(obj, dict):
-            return {k: convert(v) for k, v in obj.items()}
-        elif isinstance(obj, Decimal):
-            return int(obj) if obj % 1 == 0 else float(obj)
-        return obj
+
+    if isinstance(obj, list):
+        return [convert(i) for i in obj]
+
+    elif isinstance(obj, dict):
+        return {k: convert(v) for k, v in obj.items()}
+
+    elif isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+
+    return obj
