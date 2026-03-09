@@ -65,11 +65,11 @@ aws cloudformation deploy \
     Stage="$STAGE" \
     CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-alpha-CrossAccountAccessRole \
     AssistantCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-assistants-alpha-CrossAccountAccessRole \
-    CandidatesTableName=jobsyme-$STAGE-candidates \
+    CandidatesTableName=jobsyme-$STAGE-candidates-details-table \
     AssistantsTableName=jobsyme-$STAGE-assistants \
     JobApplicationsTableName=jobsyme-$STAGE-job-applications \
     PortfolioTableName=jobsyme-$STAGE-portfolio \
-    GitHubActivitiesTableName=jobsyme-$STAGE-github-activities \
+    GitHubActivitiesTableName=jobsyme-$STAGE-github-activities-table \
     LinkedInActivitiesTableName=jobsyme-$STAGE-linkedin-activities \
     PaymentsTableName=jobsyme-$STAGE-payments-table \
   --capabilities CAPABILITY_NAMED_IAM \
