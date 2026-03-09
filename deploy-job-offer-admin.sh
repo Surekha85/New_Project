@@ -71,7 +71,7 @@ aws cloudformation deploy \
     PortfolioTableName=jobsyme-$STAGE-portfolio \
     GitHubActivitiesTableName=jobsyme-$STAGE-github-activities \
     LinkedInActivitiesTableName=jobsyme-$STAGE-linkedin-activities \
-    PaymentsTableName=jobsyme-$STAGE-payments \
+    PaymentsTableName=jobsyme-$STAGE-payments-table \
   --capabilities CAPABILITY_NAMED_IAM \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION"  || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
