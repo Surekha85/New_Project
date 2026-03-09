@@ -63,7 +63,7 @@ aws cloudformation deploy \
   --stack-name "$STACK_NAME" \
   --parameter-overrides \
     Stage="$STAGE" \
-    CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-alpha-CrossAccountDynamoRole \
+    CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-alpha-CrossAccountAccessRole \
     AssistantCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-assistants-alpha-CrossAccountAccessRole \
     CandidatesTableName=jobsyme-$STAGE-candidates \
     AssistantsTableName=jobsyme-$STAGE-assistants \
