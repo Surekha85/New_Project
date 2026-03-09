@@ -102,7 +102,7 @@ def get_cross_account_table(role_env, table_env):
 
     response = sts.assume_role(
         RoleArn=role_arn,
-        RoleSessionName="AdminGetCandidatesSession"
+        RoleSessionName="AdminCreateAssistantSession"
     )
 
     credentials = response["Credentials"]
@@ -118,98 +118,80 @@ def get_cross_account_table(role_env, table_env):
 
 
 # ---------------------------------------------------
-# GET ACTIVE CANDIDATE IDS (SCAN)
+# Get Active Subscriber Candidate IDs
 # ---------------------------------------------------
 def get_active_candidate_ids(payments_table):
+    """
+    Fetch all candidate IDs from the payments table who have an active subscription
+    that has not yet expired. This works without using GSI and handles nested subscription fields.
 
+    Args:
+        payments_table (boto3.Table): DynamoDB table object for payments.
+
+    Returns:
+        List[str]: List of candidate IDs with active subscriptions.
+    """
+
+    # Get the current datetime in UTC to compare with subscription end dates
     now = datetime.now(timezone.utc)
 
+    # List to store candidate IDs that have active subscriptions
     candidate_ids = []
 
+    # Initial scan of the table
+    # ProjectionExpression limits the attributes returned to only what we need
     response = payments_table.scan(
         ProjectionExpression="jaa_candidate_id, subscription"
     )
 
+    # Loop through all scanned pages
     while True:
-
+        # Get the items from this page of scan
         items = response.get("Items", [])
 
+        # Process each item (payment record)
         for item in items:
-
+            # Get the nested subscription map
             subscription = item.get("subscription", {})
+            status = subscription.get("status")  # subscription status
+            end_date = subscription.get("subscription_period_end")  # subscription end datetime
 
-            status = subscription.get("status")
-            end_date = subscription.get("subscription_period_end")
+            # Only consider items where subscription is active and has an end date
+            if status and status.lower() == "active" and end_date:
+                try:
+                    # Convert subscription end date string to a datetime object
+                    # Format expected: "YYYY-MM-DDTHH:MM:SSZ" (UTC ISO format)
+                    end_datetime = datetime.strptime(end_date, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
-            if status == "active" and end_date:
+                    # Check if the subscription is still valid (end date >= now)
+                    if end_datetime >= now:
+                        # Extract the candidate ID from the item
+                        candidate_id = item.get("jaa_candidate_id")
+                        if candidate_id:
+                            candidate_ids.append(candidate_id)
 
-                end_datetime = datetime.strptime(
-                    end_date,
-                    "%Y-%m-%dT%H:%M:%SZ"
-                ).replace(tzinfo=timezone.utc)
+                except Exception as e:
+                    # If date parsing fails, log it for debugging
+                    print("Date parse error:", end_date, e)
 
-                if end_datetime >= now:
-
-                    cid = item.get("jaa_candidate_id")
-
-                    if cid:
-                        candidate_ids.append(cid)
-
+        # Check if there is more data to scan (pagination)
         if "LastEvaluatedKey" not in response:
+            # No more pages, break the loop
             break
 
+        # Scan the next page of results using the last evaluated key
         response = payments_table.scan(
             ProjectionExpression="jaa_candidate_id, subscription",
             ExclusiveStartKey=response["LastEvaluatedKey"]
         )
 
+    # Return the list of candidate IDs that have active subscriptions
     return candidate_ids
 
 
-# ---------------------------------------------------
-# BATCH GET CANDIDATES
-# ---------------------------------------------------
-def batch_get_candidates(candidate_table, candidate_ids):
-
-    dynamodb = boto3.client("dynamodb")
-
-    table_name = candidate_table.name
-
-    candidates = []
-
-    for i in range(0, len(candidate_ids), 100):
-
-        chunk = candidate_ids[i:i+100]
-
-        keys = [
-            {"jaa_candidate_id": {"S": cid}}
-            for cid in chunk
-        ]
-
-        response = dynamodb.batch_get_item(
-            RequestItems={
-                table_name: {
-                    "Keys": keys
-                }
-            }
-        )
-
-        items = response["Responses"].get(table_name, [])
-
-        for item in items:
-
-            normal_item = {}
-
-            for k, v in item.items():
-                normal_item[k] = list(v.values())[0]
-
-            candidates.append(normal_item)
-
-    return candidates
-
 
 # ---------------------------------------------------
-# LAMBDA HANDLER
+# Lambda Handler
 # ---------------------------------------------------
 def handler(event, context):
 
@@ -224,9 +206,9 @@ def handler(event, context):
 
     try:
 
-        # -------------------------
+        # -----------------------------------------
         # VERIFY ADMIN TOKEN
-        # -------------------------
+        # -----------------------------------------
         admin_data, error = verify_admin_token(event)
 
         if error:
@@ -236,9 +218,9 @@ def handler(event, context):
                 "body": json.dumps({"message": error})
             }
 
-        # -------------------------
-        # TABLES
-        # -------------------------
+        # -----------------------------------------
+        # Tables
+        # -----------------------------------------
         payments_table = get_cross_account_table(
             "CANDIDATE_DYNAMO_ROLE_ARN",
             "PAYMENTS_TABLE"
@@ -249,9 +231,9 @@ def handler(event, context):
             "CANDIDATES_TABLE"
         )
 
-        # -------------------------
-        # GET ACTIVE CANDIDATES
-        # -------------------------
+        # -----------------------------------------
+        # Get Active Subscriber Candidate IDs
+        # -----------------------------------------
         active_candidate_ids = get_active_candidate_ids(payments_table)
 
         if not active_candidate_ids:
@@ -264,13 +246,21 @@ def handler(event, context):
                 })
             }
 
-        # -------------------------
-        # FETCH CANDIDATES
-        # -------------------------
-        candidates = batch_get_candidates(
-            candidate_table,
-            active_candidate_ids
-        )
+        # -----------------------------------------
+        # Fetch Candidates
+        # -----------------------------------------
+        candidates = []
+
+        for cid in active_candidate_ids:
+
+            response = candidate_table.get_item(
+                Key={"jaa_candidate_id": cid}
+            )
+
+            item = response.get("Item")
+
+            if item:
+                candidates.append(item)
 
         final_response = get_all_candidates(candidates)
 
