@@ -256,8 +256,8 @@ def handler(event, context):
 
 
 
+
 # {
 #   "httpMethod": "POST",
-#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}"
-#   }
+#   "body": "{\n  \"first_name\": \"Surekha\",\n  \"last_name\": \"S\",\n  \"email\": \"surekha@gmail.com\",\n  \"password\": \"Surekha@22\"\n}"
 # }
