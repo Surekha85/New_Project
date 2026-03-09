@@ -373,10 +373,8 @@ def handler(event, context):
 
 # {
 #   "httpMethod": "POST",
-#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}",
-#   "requestContext": {
-#     "authorizer": {
-#       "principalId": "admin-1234"
-#     }
-#   }
+#   "headers": {
+#     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiNTBlM2E0ZWEtZTBiZi00NmQ2LWIxYWMtNTIyYTE0MDVhNDc3IiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwidXNlcl90eXBlIjoiYWRtaW4iLCJmaXJzdF9uYW1lIjoiSm9obiIsImxhc3RfbmFtZSI6IkRvZSIsImlhdCI6MTc3MzA1MjQ5MSwiZXhwIjoxNzczMTM4ODkxfQ.3c8VmbyHJdiDctnM8Ia3NqF-wK0gt5XTnb0vPCCE-4w"
+#   },
+#   "body": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Str0ngP@ssword!\"\n}"
 # }
