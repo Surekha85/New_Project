@@ -56,13 +56,14 @@ aws_cmd cloudformation package \
   --region "$REGION" || { echo "❌ Failed to package CloudFormation template."; exit 1; }
 
 VERSION=$(date +"%d/%m/%Y %H:%M")
+CandidateAccountId="779803046578"
 # 🚀 Step 5: Deploy the packaged stack
 echo "🚀 Deploying stack: $STACK_NAME..."
 aws cloudformation deploy \
   --template-file "$PACKAGED_TEMPLATE" \
   --stack-name "$STACK_NAME" \
   --parameter-overrides \
-    Stage="$STAGE" \
+    Stage="$STAGE" CandidateAccountId="$CandidateAccountId" \
     CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-alpha-CrossAccountAccessRole \
     AssistantCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-assistants-alpha-CrossAccountAccessRole \
     CandidatesTableName=jobsyme-$STAGE-candidates-details-table \

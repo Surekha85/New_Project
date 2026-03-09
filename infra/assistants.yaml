@@ -12,6 +12,10 @@ Parameters:
     Default: "Version1"
     Description: Version to force API Gateway redeployment
   
+  CandidateAccountId:
+    Type: String
+    Description: "AWS Account ID for Candidate account (for cross-account access)"
+  
   CandidatesTableName:
     Type: String
     Description: "Candidates table (from Candidates account)"
@@ -138,6 +142,31 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/admin/jwt-secret*"
+
+        - PolicyName: crossAccountTable
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:GetItem
+                  - dynamodb:BatchGetItem
+                  - dynamodb:Query
+                Resource:
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-payments-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-candidates-details-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-candidates-details-table/index/*
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants-table/index/*
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications-table/index/*
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-portfolio-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-github-activities-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-github-activities-table/index/*
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities-table
+                  - arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities-table/index/*
 
 
 
