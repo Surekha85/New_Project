@@ -274,3 +274,19 @@ def convert(obj):
         return int(obj) if obj % 1 == 0 else float(obj)
 
     return obj
+
+
+
+
+
+
+
+
+# {
+#   "httpMethod": "POST",
+#   "requestContext": {
+#     "authorizer": {
+#       "principalId": "admin_001"
+#     }
+#   }
+# }
