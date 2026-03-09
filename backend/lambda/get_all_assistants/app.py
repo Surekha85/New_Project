@@ -1,9 +1,6 @@
 import os
 import json
-import uuid
 import boto3
-import bcrypt
-import re
 from datetime import datetime
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key
@@ -85,25 +82,6 @@ def handler(event, context):
                 "statusCode": 401,
                 "headers": cors,
                 "body": json.dumps({"message": "Unauthorized"})
-            }
-
-        # -----------------------------------------
-        # Parse Body
-        # -----------------------------------------
-        if not event.get("body"):
-            return {
-                "statusCode": 400,
-                "headers": cors,
-                "body": json.dumps({"message": "Request body required"})
-            }
-
-        try:
-            body = json.loads(event["body"])
-        except json.JSONDecodeError:
-            return {
-                "statusCode": 400,
-                "headers": cors,
-                "body": json.dumps({"message": "Invalid JSON"})
             }
 
         # -----------------------------------------
