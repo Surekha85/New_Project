@@ -130,6 +130,7 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
                   - dynamodb:Query
+                  - dynamodb:BatchGetItem
                 Resource:
                   - !GetAtt AdminsTable.Arn
                   - !Sub "${AdminsTable.Arn}/index/*"

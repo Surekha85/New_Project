@@ -4,6 +4,7 @@ import boto3
 import jwt
 from decimal import Decimal
 from datetime import datetime, timezone
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 # ---------------------------------------------------
@@ -27,7 +28,7 @@ def get_cors_headers():
 
 
 # ---------------------------------------------------
-# GET JWT SECRET (CACHED)
+# GET JWT SECRET
 # ---------------------------------------------------
 def get_jwt_secret():
 
@@ -102,7 +103,7 @@ def get_cross_account_table(role_env, table_env):
 
     response = sts.assume_role(
         RoleArn=role_arn,
-        RoleSessionName="AdminCreateAssistantSession"
+        RoleSessionName="AdminGetCandidatesSession"
     )
 
     credentials = response["Credentials"]
@@ -118,15 +119,20 @@ def get_cross_account_table(role_env, table_env):
 
 
 # ---------------------------------------------------
-# Get Active Subscriber Candidate IDs
+# Get Active Candidate IDs using GSI
 # ---------------------------------------------------
 def get_active_candidate_ids(payments_table):
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     candidate_ids = []
 
-    response = payments_table.scan()
+    response = payments_table.query(
+        IndexName="SubscriptionStatusIndex",
+        KeyConditionExpression=
+        Key("subscription_status").eq("active") &
+        Key("subscription_period_end").gte(now)
+    )
 
     while True:
 
@@ -134,33 +140,61 @@ def get_active_candidate_ids(payments_table):
 
         for item in items:
 
-            subscription = item.get("subscription", {})
+            cid = item.get("jaa_candidate_id")
 
-            status = subscription.get("status")
-            end_date = subscription.get("subscription_period_end")
-
-            if status == "active" and end_date:
-
-                end_datetime = datetime.strptime(
-                    end_date,
-                    "%Y-%m-%dT%H:%M:%SZ"
-                ).replace(tzinfo=timezone.utc)
-
-                if end_datetime >= now:
-
-                    candidate_id = item.get("jaa_candidate_id")
-
-                    if candidate_id:
-                        candidate_ids.append(candidate_id)
+            if cid:
+                candidate_ids.append(cid)
 
         if "LastEvaluatedKey" not in response:
             break
 
-        response = payments_table.scan(
+        response = payments_table.query(
+            IndexName="SubscriptionStatusIndex",
+            KeyConditionExpression=
+            Key("subscription_status").eq("active") &
+            Key("subscription_period_end").gte(now),
             ExclusiveStartKey=response["LastEvaluatedKey"]
         )
 
     return candidate_ids
+
+
+# ---------------------------------------------------
+# Batch Get Candidates
+# ---------------------------------------------------
+def batch_get_candidates(candidate_table, candidate_ids):
+
+    dynamodb = boto3.client("dynamodb")
+
+    table_name = candidate_table.name
+
+    candidates = []
+
+    for i in range(0, len(candidate_ids), 100):
+
+        chunk = candidate_ids[i:i+100]
+
+        keys = [
+            {"jaa_candidate_id": {"S": cid}}
+            for cid in chunk
+        ]
+
+        response = dynamodb.batch_get_item(
+            RequestItems={
+                table_name: {
+                    "Keys": keys
+                }
+            }
+        )
+
+        items = response["Responses"].get(table_name, [])
+
+        for item in items:
+            candidates.append(
+                {k: list(v.values())[0] for k, v in item.items()}
+            )
+
+    return candidates
 
 
 # ---------------------------------------------------
@@ -179,9 +213,9 @@ def handler(event, context):
 
     try:
 
-        # -----------------------------------------
+        # -------------------------
         # VERIFY ADMIN TOKEN
-        # -----------------------------------------
+        # -------------------------
         admin_data, error = verify_admin_token(event)
 
         if error:
@@ -191,9 +225,9 @@ def handler(event, context):
                 "body": json.dumps({"message": error})
             }
 
-        # -----------------------------------------
-        # Tables
-        # -----------------------------------------
+        # -------------------------
+        # TABLES
+        # -------------------------
         payments_table = get_cross_account_table(
             "CANDIDATE_DYNAMO_ROLE_ARN",
             "PAYMENTS_TABLE"
@@ -204,9 +238,9 @@ def handler(event, context):
             "CANDIDATES_TABLE"
         )
 
-        # -----------------------------------------
-        # Get Active Subscriber Candidate IDs
-        # -----------------------------------------
+        # -------------------------
+        # GET ACTIVE CANDIDATES
+        # -------------------------
         active_candidate_ids = get_active_candidate_ids(payments_table)
 
         if not active_candidate_ids:
@@ -219,21 +253,13 @@ def handler(event, context):
                 })
             }
 
-        # -----------------------------------------
-        # Fetch Candidates
-        # -----------------------------------------
-        candidates = []
-
-        for cid in active_candidate_ids:
-
-            response = candidate_table.get_item(
-                Key={"jaa_candidate_id": cid}
-            )
-
-            item = response.get("Item")
-
-            if item:
-                candidates.append(item)
+        # -------------------------
+        # FETCH CANDIDATES
+        # -------------------------
+        candidates = batch_get_candidates(
+            candidate_table,
+            active_candidate_ids
+        )
 
         final_response = get_all_candidates(candidates)
 
@@ -344,19 +370,3 @@ def convert(obj):
         return int(obj) if obj % 1 == 0 else float(obj)
 
     return obj
-
-
-
-
-
-
-
-
-# {
-#   "httpMethod": "POST",
-#   "requestContext": {
-#     "authorizer": {
-#       "principalId": "admin_001"
-#     }
-#   }
-# }
