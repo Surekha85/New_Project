@@ -241,6 +241,7 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
 
           CANDIDATES_TABLE: !Ref CandidatesTableName
+          PAYMENTS_TABLE: !Ref PaymentsTableName
 
           ASSISTANTS_TABLE: !Ref AssistantsTableName
 
