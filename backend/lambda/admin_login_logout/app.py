@@ -226,10 +226,10 @@ def error_response(status_code, message, headers):
 
 
 
-# {
-#   "httpMethod": "POST",
-#   "headers": {
-#     "Content-Type": "application/json"
-#   },
-#   "body": "{\"action\": \"login\", \"email\": \"admin@example.com\", \"password\": \"password123\"}"
-# }
+{
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"action\": \"login\", \"email\": \"john.doe@example.com\", \"password\": \"Str0ngP@ssword!\"}"
+}

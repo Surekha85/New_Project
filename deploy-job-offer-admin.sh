@@ -66,13 +66,13 @@ aws cloudformation deploy \
     Stage="$STAGE" CandidateAccountId="$CandidateAccountId" \
     CandidateCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-candidates-alpha-CrossAccountAccessRole \
     AssistantCrossAccountRoleArn=arn:aws:iam::779803046578:role/jobsyme-assistants-alpha-CrossAccountAccessRole \
-    CandidatesTableName=jobsyme-$STAGE-candidates-details-table \
-    AssistantsTableName=jobsyme-$STAGE-assistants \
-    JobApplicationsTableName=jobsyme-$STAGE-job-applications \
-    PortfolioTableName=jobsyme-$STAGE-portfolio \
-    GitHubActivitiesTableName=jobsyme-$STAGE-github-activities-table \
-    LinkedInActivitiesTableName=jobsyme-$STAGE-linkedin-activities \
-    PaymentsTableName=jobsyme-$STAGE-payments-table \
+    CandidatesTableName=jobsyme-alpha-candidates-details-table \
+    AssistantsTableName=jobsyme-alpha-assistants \
+    JobApplicationsTableName=jobsyme-alpha-job-applications \
+    PortfolioTableName=jobsyme-alpha-portfolio \
+    GitHubActivitiesTableName=jobsyme-alpha-github-activities-table \
+    LinkedInActivitiesTableName=jobsyme-alpha-linkedin-activities \
+    PaymentsTableName=jobsyme-alpha-payments-table \
   --capabilities CAPABILITY_NAMED_IAM \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION"  || { echo "❌ Failed to deploy CloudFormation stack."; exit 1; }
