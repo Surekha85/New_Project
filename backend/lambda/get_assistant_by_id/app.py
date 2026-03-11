@@ -21,7 +21,7 @@ logger.setLevel(logging.INFO)
 
 
 # ============================================================
-# FastAPI
+# FastAPI App
 # ============================================================
 
 app = FastAPI()
@@ -37,7 +37,7 @@ dynamodb = boto3.resource("dynamodb")
 
 
 # ============================================================
-# Tables
+# DynamoDB Tables
 # ============================================================
 
 job_table = dynamodb.Table(os.environ["JOB_APPLICATIONS_TABLE"])
@@ -147,6 +147,27 @@ def get_assistant_table():
 
 
 # ============================================================
+# Get Candidates for Assistant
+# ============================================================
+
+def get_assigned_candidates(assistant_id):
+
+    assistant_table = get_assistant_table()
+
+    response = assistant_table.get_item(
+        Key={"assistantId": assistant_id},
+        ProjectionExpression="assigned_candidates"
+    )
+
+    assistant = response.get("Item")
+
+    if not assistant:
+        raise HTTPException(status_code=404, detail="Assistant not found")
+
+    return assistant.get("assigned_candidates", [])
+
+
+# ============================================================
 # Week Range
 # ============================================================
 
@@ -159,178 +180,203 @@ def get_week_range(date):
 
 
 # ============================================================
-# API
+# 1️⃣ Job Applications
 # ============================================================
 
-@app.get("/admin/assistants/{assistant_id}/candidates-activities")
-def get_candidates_activity(
+@app.get("/admin/assistants/{assistant_id}/job-applications")
+def get_job_applications(
         assistant_id: str = Path(...),
         date: str = Query(...),
         admin=Depends(verify_admin)
 ):
 
-    try:
+    week_start, week_end = get_week_range(date)
 
-        week_start, week_end = get_week_range(date)
+    candidates = get_assigned_candidates(assistant_id)
 
-        assistant_table = get_assistant_table()
+    result = []
 
-        assistant_resp = assistant_table.get_item(
-            Key={"assistantId": assistant_id},
-            ProjectionExpression="assistantId, assigned_candidates"
+    for candidate_id in candidates:
+
+        response = job_table.query(
+            IndexName="candidate_date_index",
+            KeyConditionExpression=
+            Key("jaa_candidate_id").eq(candidate_id) &
+            Key("application_date").between(week_start, week_end)
         )
 
-        assistant = assistant_resp.get("Item")
+        jobs = []
 
-        # if not assistant:
-        #     raise HTTPException(status_code=404, detail="Assistant not found")
+        for j in response.get("Items", []):
 
-        candidates = ['cand1', 'cand2', 'cand3']  # assistant.get("assigned_candidates", [])
-
-        candidates_list = []
-
-        # ====================================================
-        # Loop Candidates
-        # ====================================================
-
-        for candidate_id in candidates:
-
-            # ---------------- Job Applications
-            job_resp = job_table.query(
-                IndexName="candidate_date_index",
-                KeyConditionExpression=
-                Key("jaa_candidate_id").eq(candidate_id) &
-                Key("application_date").between(week_start, week_end)
-            )
-
-            job_items = []
-
-            for j in job_resp.get("Items", []):
-
-                job_items.append({
-                    "job_id": j.get("job_id"),
-                    "company_name": j.get("company_name"),
-                    "job_title": j.get("job_title"),
-                    "application_date": j.get("application_date"),
-                    "approval_status": j.get("approval_status")
-                })
-
-
-            # ---------------- LinkedIn Activities
-            linkedin_resp = linkedin_table.query(
-                IndexName="CreatedAtIndex",
-                KeyConditionExpression=
-                Key("jaa_candidate_id").eq(candidate_id) &
-                Key("create_date").between(week_start, week_end)
-            )
-
-            linkedin_items = []
-
-            for l in linkedin_resp.get("Items", []):
-
-                linkedin_items.append({
-                    "task_id": l.get("task_id"),
-                    "task_type": l.get("task_type"),
-                    "title": l.get("title"),
-                    "status": l.get("status"),
-                    "create_date": l.get("create_date")
-                })
-
-
-            # ---------------- GitHub Projects
-            github_resp = github_table.query(
-                IndexName="CandidateIndex",
-                KeyConditionExpression=Key("jaa_candidate_id").eq(candidate_id)
-            )
-
-            github_projects = []
-
-            for item in github_resp.get("Items", []):
-
-                if item.get("entity_type") != "PROJECT":
-                    continue
-
-                project_id = item.get("project_id")
-
-                commits_resp = github_table.query(
-                    KeyConditionExpression=
-                    Key("project_id").eq(project_id) &
-                    Key("commit_date").between(week_start, week_end)
-                )
-
-                commits_list = []
-
-                for c in commits_resp.get("Items", []):
-
-                    if c.get("entity_type") != "COMMIT":
-                        continue
-
-                    commits_list.append({
-                        "commit_id": c.get("id"),
-                        "message": c.get("message"),
-                        "author": c.get("author"),
-                        "commit_date": c.get("commit_date")
-                    })
-
-                github_projects.append({
-                    "project_id": project_id,
-                    "project_name": item.get("project_name"),
-                    "repo_url": item.get("repo_url"),
-                    "commits": commits_list
-                })
-
-
-            # ---------------- Portfolio
-            portfolio_resp = portfolio_table.get_item(
-                Key={"jaa_candidate_id": candidate_id}
-            )
-
-            portfolio_item = portfolio_resp.get("Item")
-
-            portfolio = None
-
-            if portfolio_item:
-
-                portfolio = {
-                    "portfolio_id": portfolio_item.get("portfolio_id"),
-                    "status": portfolio_item.get("status"),
-                    "deployment_url": portfolio_item.get("vercel_deployment_url"),
-                    "deployment_status": portfolio_item.get("deployment_status")
-                }
-
-
-            # ---------------- Candidate JSON
-            candidates_list.append({
-                "candidate_id": candidate_id,
-                "job_applications": job_items,
-                "linkedin_activities": linkedin_items,
-                "github_projects": github_projects,
-                "portfolio": portfolio
+            jobs.append({
+                "job_id": j.get("job_id"),
+                "company_name": j.get("company_name"),
+                "job_title": j.get("job_title"),
+                "application_date": j.get("application_date")
             })
 
+        result.append({
+            "candidate_id": candidate_id,
+            "job_applications": jobs
+        })
 
-        # ====================================================
-        # Final JSON
-        # ====================================================
+    return JSONResponse(content=convert_decimal(result))
 
-        response_body = {
-            "assistant_id": assistant_id,
-            "week_start_date": week_start,
-            "week_end_date": week_end,
-            "total_candidates": len(candidates_list),
-            "candidates": candidates_list
-        }
 
-        return JSONResponse(
-            status_code=200,
-            content=convert_decimal(response_body)
+# ============================================================
+# 2️⃣ LinkedIn Activities
+# ============================================================
+
+@app.get("/admin/assistants/{assistant_id}/linkedin-activities")
+def get_linkedin_activities(
+        assistant_id: str = Path(...),
+        date: str = Query(...),
+        admin=Depends(verify_admin)
+):
+
+    week_start, week_end = get_week_range(date)
+
+    candidates = get_assigned_candidates(assistant_id)
+
+    result = []
+
+    for candidate_id in candidates:
+
+        response = linkedin_table.query(
+            IndexName="CreatedAtIndex",
+            KeyConditionExpression=
+            Key("jaa_candidate_id").eq(candidate_id) &
+            Key("create_date").between(week_start, week_end)
         )
 
-    except Exception as e:
+        activities = []
 
-        logger.exception("Error occurred")
+        for l in response.get("Items", []):
 
-        raise HTTPException(status_code=500, detail=str(e))
+            activities.append({
+                "task_id": l.get("task_id"),
+                "task_type": l.get("task_type"),
+                "title": l.get("title"),
+                "status": l.get("status"),
+                "create_date": l.get("create_date")
+            })
+
+        result.append({
+            "candidate_id": candidate_id,
+            "linkedin_activities": activities
+        })
+
+    return JSONResponse(content=convert_decimal(result))
+
+
+# ============================================================
+# 3️⃣ GitHub Activities
+# ============================================================
+
+@app.get("/admin/assistants/{assistant_id}/github-activities")
+def get_github_activities(
+        assistant_id: str = Path(...),
+        date: str = Query(...),
+        admin=Depends(verify_admin)
+):
+
+    week_start, week_end = get_week_range(date)
+
+    candidates = get_assigned_candidates(assistant_id)
+
+    result = []
+
+    for candidate_id in candidates:
+
+        response = github_table.query(
+            IndexName="CandidateIndex",
+            KeyConditionExpression=Key("jaa_candidate_id").eq(candidate_id)
+        )
+
+        projects = []
+
+        for item in response.get("Items", []):
+
+            if item.get("entity_type") != "PROJECT":
+                continue
+
+            project_id = item.get("project_id")
+
+            commits_resp = github_table.query(
+                KeyConditionExpression=
+                Key("project_id").eq(project_id) &
+                Key("commit_date").between(week_start, week_end)
+            )
+
+            commits = []
+
+            for c in commits_resp.get("Items", []):
+
+                if c.get("entity_type") != "COMMIT":
+                    continue
+
+                commits.append({
+                    "commit_id": c.get("id"),
+                    "message": c.get("message"),
+                    "author": c.get("author"),
+                    "commit_date": c.get("commit_date")
+                })
+
+            projects.append({
+                "project_id": project_id,
+                "project_name": item.get("project_name"),
+                "repo_url": item.get("repo_url"),
+                "commits": commits
+            })
+
+        result.append({
+            "candidate_id": candidate_id,
+            "github_projects": projects
+        })
+
+    return JSONResponse(content=convert_decimal(result))
+
+
+# ============================================================
+# 4️⃣ Portfolio
+# ============================================================
+
+@app.get("/admin/assistants/{assistant_id}/portfolio")
+def get_portfolio(
+        assistant_id: str = Path(...),
+        admin=Depends(verify_admin)
+):
+
+    candidates = get_assigned_candidates(assistant_id)
+
+    result = []
+
+    for candidate_id in candidates:
+
+        response = portfolio_table.get_item(
+            Key={"jaa_candidate_id": candidate_id}
+        )
+
+        item = response.get("Item")
+
+        portfolio = None
+
+        if item:
+
+            portfolio = {
+                "portfolio_id": item.get("portfolio_id"),
+                "status": item.get("status"),
+                "deployment_url": item.get("vercel_deployment_url"),
+                "deployment_status": item.get("deployment_status")
+            }
+
+        result.append({
+            "candidate_id": candidate_id,
+            "portfolio": portfolio
+        })
+
+    return JSONResponse(content=convert_decimal(result))
 
 
 # ============================================================
