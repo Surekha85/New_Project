@@ -265,6 +265,13 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           ASSISTANTS_TABLE: !Ref AssistantsTableName
+          JOB_APPLICATIONS_TABLE: !Ref JobApplicationsTableName
+
+          PORTFOLIO_TABLE: !Ref PortfolioTableName
+
+          GITHUB_ACTIVITIES_TABLE: !Ref GitHubActivitiesTableName
+
+          LINKEDIN_ACTIVITIES_TABLE: !Ref LinkedInActivitiesTableName
       Code: ../lambdas/get_assistant_by_id_lambda.zip
 
   GetAllCandidatesLambda:
