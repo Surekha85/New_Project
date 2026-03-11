@@ -231,5 +231,5 @@ def error_response(status_code, message, headers):
   "headers": {
     "Content-Type": "application/json"
   },
-  "body": "{\"action\": \"login\", \"email\": \"john.doe@example.com\", \"password\": \"Str0ngP@ssword!\"}"
+  "body": "{\"action\": \"login\", \"email\": \"john@example.com\", \"password\": \"Str0ngP@ssword!\"}"
 }
