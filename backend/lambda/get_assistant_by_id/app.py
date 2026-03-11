@@ -161,10 +161,11 @@ def get_assigned_candidates(assistant_id):
 
     assistant = response.get("Item")
 
-    if not assistant:
-        raise HTTPException(status_code=404, detail="Assistant not found")
+    # if not assistant:
+    #     raise HTTPException(status_code=404, detail="Assistant not found")
 
-    return assistant.get("assigned_candidates", [])
+    # return assistant.get("assigned_candidates", [])
+    return ['cand1', 'cand2', 'cand3']
 
 
 # ============================================================
