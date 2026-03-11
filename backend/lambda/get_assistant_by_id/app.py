@@ -182,10 +182,10 @@ def get_candidates_activity(
 
         assistant = assistant_resp.get("Item")
 
-        if not assistant:
-            raise HTTPException(status_code=404, detail="Assistant not found")
+        # if not assistant:
+        #     raise HTTPException(status_code=404, detail="Assistant not found")
 
-        candidates = assistant.get("assigned_candidates", [])
+        candidates = ['cand1', 'cand2', 'cand3']  # assistant.get("assigned_candidates", [])
 
         candidates_list = []
 

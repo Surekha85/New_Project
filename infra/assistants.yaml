@@ -156,7 +156,8 @@ Resources:
                   - dynamodb:BatchGetItem
                   - dynamodb:Query
                 Resource:
-
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants"
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants/index/*"
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-payments-table"
 
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-candidates-details-table"
@@ -165,16 +166,16 @@ Resources:
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants-table"
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants-table/index/*"
 
-                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications-table"
-                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications-table/index/*"
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications"
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-job-applications/index/*"
 
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-portfolio-table"
 
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-github-activities-table"
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-github-activities-table/index/*"
 
-                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities-table"
-                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities-table/index/*"
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities"
+                  - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-linkedin-activities/index/*"
 
 
   ############################################################
