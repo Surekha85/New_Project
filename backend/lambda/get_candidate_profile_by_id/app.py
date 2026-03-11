@@ -38,50 +38,52 @@ secrets_client = boto3.client("secretsmanager")
 
 # ---------------------------------------------------
 # Caches
-# ---------------------------------------------------
+# ====================================================
+STS_CACHE = {}  # role_arn -> {"dynamodb": ..., "expires_at": datetime}
+JWT_SECRET_CACHE = {"secret": None, "expires_at": None}
+JWT_CACHE_TTL = timedelta(minutes=10)  # refresh JWT secret every 10 mins
 
-STS_CACHE = {}
-JWT_SECRET_CACHE = None
-
-
-# ---------------------------------------------------
-# CORS
-# ---------------------------------------------------
-
+# ====================================================
+# CORS Headers
+# ====================================================
 def get_cors_headers():
     return {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Allow-Methods": "*"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Methods": "GET, OPTIONS"
     }
 
-
-# ---------------------------------------------------
-# STS Assume Role (Cached)
-# ---------------------------------------------------
-
+# ====================================================
+# STS Assume Role (with expiry)
+# ====================================================
 def assume_role(role_arn):
+    now = datetime.utcnow()
+    cache_entry = STS_CACHE.get(role_arn)
 
-    if role_arn in STS_CACHE:
-        return STS_CACHE[role_arn]
+    if cache_entry and cache_entry["expires_at"] > now:
+        return cache_entry["dynamodb"]
 
-    response = sts_client.assume_role(
-        RoleArn=role_arn,
-        RoleSessionName="AdminPortalSession"
-    )
+    try:
+        response = sts_client.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="AdminPortalSession"
+        )
+        credentials = response["Credentials"]
+        dynamodb = boto3.resource(
+            "dynamodb",
+            aws_access_key_id=credentials["AccessKeyId"],
+            aws_secret_access_key=credentials["SecretAccessKey"],
+            aws_session_token=credentials["SessionToken"]
+        )
 
-    credentials = response["Credentials"]
-
-    dynamodb = boto3.resource(
-        "dynamodb",
-        aws_access_key_id=credentials["AccessKeyId"],
-        aws_secret_access_key=credentials["SecretAccessKey"],
-        aws_session_token=credentials["SessionToken"]
-    )
-
-    STS_CACHE[role_arn] = dynamodb
-
-    return dynamodb
+        STS_CACHE[role_arn] = {
+            "dynamodb": dynamodb,
+            "expires_at": credentials["Expiration"] - timedelta(minutes=5)  # refresh 5 min before expiry
+        }
+        return dynamodb
+    except Exception as e:
+        logger.exception(f"Failed to assume role {role_arn}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 # ---------------------------------------------------
@@ -103,26 +105,22 @@ portfolio_table = dynamodb.Table(os.environ["PORTFOLIO_TABLE"])
 # ---------------------------------------------------
 
 def get_jwt_secret():
-
-    global JWT_SECRET_CACHE
-
-    if JWT_SECRET_CACHE:
-        return JWT_SECRET_CACHE
+    now = datetime.utcnow()
+    if JWT_SECRET_CACHE["secret"] and JWT_SECRET_CACHE["expires_at"] > now:
+        return JWT_SECRET_CACHE["secret"]
 
     secret_name = os.environ["JWT_SECRET_NAME"]
+    try:
+        response = secrets_client.get_secret_value(SecretId=secret_name)
+        secret_data = json.loads(response["SecretString"])
+        JWT_SECRET_CACHE["secret"] = secret_data["jwt_secret"]
+        JWT_SECRET_CACHE["expires_at"] = now + JWT_CACHE_TTL
+        return JWT_SECRET_CACHE["secret"]
+    except Exception as e:
+        logger.exception(f"Failed to retrieve JWT secret {secret_name}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-    response = secrets_client.get_secret_value(
-        SecretId=secret_name
-    )
-
-    secret_data = json.loads(response["SecretString"])
-
-    JWT_SECRET_CACHE = secret_data["jwt_secret"]
-
-    return JWT_SECRET_CACHE
-
-
-# ---------------------------------------------------
+# ====================================================
 # Verify Admin Token
 # ---------------------------------------------------
 
