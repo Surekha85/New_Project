@@ -4,9 +4,9 @@ import jwt
 import boto3
 import logging
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime,timedelta,timezone
 from decimal import Decimal
-from fastapi import FastAPI, Path, Query, Request, HTTPException, Depends
+from fastapi import FastAPI,Path,Query,Request,HTTPException,Depends
 from fastapi.responses import JSONResponse
 from boto3.dynamodb.conditions import Key
 from mangum import Mangum
@@ -33,17 +33,6 @@ app=FastAPI()
 
 secrets_client=boto3.client("secretsmanager")
 sts_client=boto3.client("sts")
-dynamodb=boto3.resource("dynamodb")
-
-
-# ============================================================
-# Tables
-# ============================================================
-
-job_table=dynamodb.Table(os.environ["JOB_APPLICATIONS_TABLE"])
-linkedin_table=dynamodb.Table(os.environ["LINKEDIN_ACTIVITIES_TABLE"])
-github_table=dynamodb.Table(os.environ["GITHUB_ACTIVITIES_TABLE"])
-portfolio_table=dynamodb.Table(os.environ["PORTFOLIO_TABLE"])
 
 
 # ============================================================
@@ -51,8 +40,12 @@ portfolio_table=dynamodb.Table(os.environ["PORTFOLIO_TABLE"])
 # ============================================================
 
 JWT_SECRET_CACHE=None
+
 ASSISTANT_TABLE_CACHE=None
-ROLE_EXPIRY=None
+ASSISTANT_ROLE_EXPIRY=None
+
+CANDIDATE_DYNAMO_CACHE=None
+CANDIDATE_ROLE_EXPIRY=None
 
 
 # ============================================================
@@ -136,41 +129,114 @@ def verify_admin(request:Request):
 
 
 # ============================================================
-# Cross Account Assistant Table (Cached)
+# Assistant Table (STS Cached)
 # ============================================================
 
 def get_assistant_table():
 
     global ASSISTANT_TABLE_CACHE
-    global ROLE_EXPIRY
+    global ASSISTANT_ROLE_EXPIRY
 
-    if ASSISTANT_TABLE_CACHE and ROLE_EXPIRY:
+    if ASSISTANT_TABLE_CACHE and ASSISTANT_ROLE_EXPIRY:
 
-        if datetime.now(timezone.utc)<ROLE_EXPIRY:
+        if datetime.now(timezone.utc)<ASSISTANT_ROLE_EXPIRY:
             return ASSISTANT_TABLE_CACHE
 
     role_arn=os.environ["ASSISTANT_DYNAMO_ROLE_ARN"]
-    table_name=os.environ["ASSISTANTS_TABLE"]
 
     assumed_role=sts_client.assume_role(
+
         RoleArn=role_arn,
         RoleSessionName="assistant-session"
+
     )
 
     credentials=assumed_role["Credentials"]
 
-    ROLE_EXPIRY=credentials["Expiration"]
+    ASSISTANT_ROLE_EXPIRY=credentials["Expiration"]
 
-    dynamodb_cross=boto3.resource(
+    dynamodb=boto3.resource(
+
         "dynamodb",
+
         aws_access_key_id=credentials["AccessKeyId"],
         aws_secret_access_key=credentials["SecretAccessKey"],
         aws_session_token=credentials["SessionToken"]
+
     )
 
-    ASSISTANT_TABLE_CACHE=dynamodb_cross.Table(table_name)
+    ASSISTANT_TABLE_CACHE=dynamodb.Table(
+        os.environ["ASSISTANTS_TABLE"]
+    )
 
     return ASSISTANT_TABLE_CACHE
+
+
+# ============================================================
+# Candidate Dynamo (STS Cached)
+# ============================================================
+
+def get_candidate_dynamodb():
+
+    global CANDIDATE_DYNAMO_CACHE
+    global CANDIDATE_ROLE_EXPIRY
+
+    if CANDIDATE_DYNAMO_CACHE and CANDIDATE_ROLE_EXPIRY:
+
+        if datetime.now(timezone.utc)<CANDIDATE_ROLE_EXPIRY:
+            return CANDIDATE_DYNAMO_CACHE
+
+    role_arn=os.environ["CANDIDATE_DYNAMO_ROLE_ARN"]
+
+    assumed_role=sts_client.assume_role(
+
+        RoleArn=role_arn,
+        RoleSessionName="candidate-session"
+
+    )
+
+    credentials=assumed_role["Credentials"]
+
+    CANDIDATE_ROLE_EXPIRY=credentials["Expiration"]
+
+    CANDIDATE_DYNAMO_CACHE=boto3.resource(
+
+        "dynamodb",
+
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"]
+
+    )
+
+    return CANDIDATE_DYNAMO_CACHE
+
+
+# ============================================================
+# Candidate Tables Getter
+# ============================================================
+
+def get_candidate_tables():
+
+    dynamodb=get_candidate_dynamodb()
+
+    job_table=dynamodb.Table(
+        os.environ["JOB_APPLICATIONS_TABLE"]
+    )
+
+    linkedin_table=dynamodb.Table(
+        os.environ["LINKEDIN_ACTIVITIES_TABLE"]
+    )
+
+    github_table=dynamodb.Table(
+        os.environ["GITHUB_ACTIVITIES_TABLE"]
+    )
+
+    portfolio_table=dynamodb.Table(
+        os.environ["PORTFOLIO_TABLE"]
+    )
+
+    return job_table,linkedin_table,github_table,portfolio_table
 
 
 # ============================================================
@@ -182,15 +248,18 @@ def get_assigned_candidates(assistant_id):
     table=get_assistant_table()
 
     response=table.get_item(
+
         Key={"assistantId":assistant_id},
+
         ProjectionExpression="assigned_candidates"
+
     )
 
     assistant=response.get("Item")
 
     if not assistant:
         return []
-    logger.info(f"Assistant {assistant_id} assigned candidates: {assistant.get('assigned_candidates',[])}")
+
     return assistant.get("assigned_candidates",[])
 
 
@@ -205,8 +274,10 @@ def get_week_range(date):
     end=start+timedelta(days=6)
 
     return (
+
         start.strftime("%Y-%m-%d"),
         end.strftime("%Y-%m-%d")
+
     )
 
 
@@ -223,8 +294,10 @@ def query_all(table,**kwargs):
     while "LastEvaluatedKey" in response:
 
         response=table.query(
+
             ExclusiveStartKey=response["LastEvaluatedKey"],
             **kwargs
+
         )
 
         items.extend(response.get("Items",[]))
@@ -238,17 +311,21 @@ def query_all(table,**kwargs):
 
 @app.get("/admin/assistants/{assistant_id}/job-applications")
 def get_job_applications(
+
     assistant_id:str=Path(...),
     date:str=Query(...),
     admin=Depends(verify_admin)
+
 ):
 
     week_start,week_end=get_week_range(date)
 
+    job_table,_,_,_=get_candidate_tables()
+
     candidates=get_assigned_candidates(assistant_id)
 
     result=[]
-    logger.info(f"Fetching job applications for assistant {assistant_id} from {week_start} to {week_end}")
+
     for candidate_id in candidates:
 
         items=query_all(
@@ -258,8 +335,14 @@ def get_job_applications(
             IndexName="candidate_date_index",
 
             KeyConditionExpression=
+
             Key("jaa_candidate_id").eq(candidate_id)&
-            Key("application_date").between(week_start,week_end)
+
+            Key("application_date").between(
+                week_start,
+                week_end
+            )
+
         )
 
         jobs=[]
@@ -272,12 +355,14 @@ def get_job_applications(
                 "company_name":j.get("company_name"),
                 "job_title":j.get("job_title"),
                 "application_date":j.get("application_date")
+
             })
 
         result.append({
 
             "candidate_id":candidate_id,
             "job_applications":jobs
+
         })
 
     return JSONResponse(convert_decimal(result))
@@ -298,6 +383,8 @@ def get_linkedin_activities(
 
     week_start,week_end=get_week_range(date)
 
+    _,linkedin_table,_,_=get_candidate_tables()
+
     candidates=get_assigned_candidates(assistant_id)
 
     result=[]
@@ -311,8 +398,14 @@ def get_linkedin_activities(
             IndexName="CreatedAtIndex",
 
             KeyConditionExpression=
+
             Key("jaa_candidate_id").eq(candidate_id)&
-            Key("create_date").between(week_start,week_end)
+
+            Key("create_date").between(
+                week_start,
+                week_end
+            )
+
         )
 
         activities=[]
@@ -326,12 +419,14 @@ def get_linkedin_activities(
                 "title":l.get("title"),
                 "status":l.get("status"),
                 "create_date":l.get("create_date")
+
             })
 
         result.append({
 
             "candidate_id":candidate_id,
             "linkedin_activities":activities
+
         })
 
     return JSONResponse(convert_decimal(result))
@@ -351,10 +446,11 @@ def get_github_activities(
 ):
 
     week_start,week_end=get_week_range(date)
-    logger.info(f"Fetching GitHub activities for assistant {assistant_id} from {week_start} to {week_end}")
+
+    _,_,github_table,_=get_candidate_tables()
 
     candidates=get_assigned_candidates(assistant_id)
-    logger.info(f"Assistant {assistant_id} assigned candidates: {candidates}")
+
     result=[]
 
     for candidate_id in candidates:
@@ -367,6 +463,7 @@ def get_github_activities(
 
             KeyConditionExpression=
             Key("jaa_candidate_id").eq(candidate_id)
+
         )
 
         projects=[]
@@ -383,11 +480,14 @@ def get_github_activities(
                 github_table,
 
                 KeyConditionExpression=
+
                 Key("project_id").eq(project_id)&
+
                 Key("commit_date").between(
                     week_start,
                     week_end
                 )
+
             )
 
             commit_list=[]
@@ -403,6 +503,7 @@ def get_github_activities(
                     "message":c.get("message"),
                     "author":c.get("author"),
                     "commit_date":c.get("commit_date")
+
                 })
 
             projects.append({
@@ -411,12 +512,14 @@ def get_github_activities(
                 "project_name":item.get("project_name"),
                 "repo_url":item.get("repo_url"),
                 "commits":commit_list
+
             })
 
         result.append({
 
             "candidate_id":candidate_id,
             "github_projects":projects
+
         })
 
     return JSONResponse(convert_decimal(result))
@@ -434,7 +537,8 @@ def get_portfolio(
 
 ):
 
-    logger.info(f"Fetching portfolio for assistant {assistant_id}")
+    _,_,_,portfolio_table=get_candidate_tables()
+
     candidates=get_assigned_candidates(assistant_id)
 
     result=[]
@@ -446,6 +550,7 @@ def get_portfolio(
             Key={
                 "jaa_candidate_id":candidate_id
             }
+
         )
 
         item=response.get("Item")
@@ -460,12 +565,14 @@ def get_portfolio(
                 "status":item.get("status"),
                 "deployment_url":item.get("vercel_deployment_url"),
                 "deployment_status":item.get("deployment_status")
+
             }
 
         result.append({
 
             "candidate_id":candidate_id,
             "portfolio":portfolio
+
         })
 
     return JSONResponse(convert_decimal(result))

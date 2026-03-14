@@ -154,6 +154,7 @@ Resources:
                   - dynamodb:Scan
                   - dynamodb:GetItem
                   - dynamodb:BatchGetItem
+                  - dynamodb:PutItem
                   - dynamodb:Query
                 Resource:
                   - !Sub "arn:aws:dynamodb:us-east-1:${CandidateAccountId}:table/jobsyme-alpha-assistants"
@@ -264,6 +265,7 @@ Resources:
       Environment:
         Variables:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
+          CANDIDATE_DYNAMO_ROLE_ARN: !Ref CandidateCrossAccountRoleArn
           JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           ASSISTANTS_TABLE: !Ref AssistantsTableName
           JOB_APPLICATIONS_TABLE: !Ref JobApplicationsTableName
