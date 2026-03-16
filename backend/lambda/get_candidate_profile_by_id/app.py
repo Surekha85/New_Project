@@ -518,20 +518,20 @@ handler = Mangum(app)
 
 
 
-# {
-#   "httpMethod": "GET",
-#   "resource": "/admin/candidates/{candidateId}/github-activities",
-#   "path": "/admin/candidates/cand1/github-activities",
-#   "pathParameters": {
-#     "candidate_id": "cand1"
-#   },
-#   "queryStringParameters": {
-#     "date": "2026-02-10"
-#   },
-#   "headers": {
-#     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiNTBlM2E0ZWEtZTBiZi00NmQ2LWIxYWMtNTIyYTE0MDVhNDc3IiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwidXNlcl90eXBlIjoiYWRtaW4iLCJmaXJzdF9uYW1lIjoiSm9obiIsImxhc3RfbmFtZSI6IkRvZSIsImlhdCI6MTc3MzIwMDI1NSwiZXhwIjoxNzczMjg2NjU1fQ.u33c0mnC3Z9BdPKJ7E8oGlHhYqc65_wDNo31Dt1KvGs"
-#   },
-#   "requestContext": {
-#   }
-# }
+{
+  "httpMethod": "GET",
+  "resource": "/admin/candidates/{candidateId}/github-activities",
+  "path": "/admin/candidates/cand1/github-activities",
+  "pathParameters": {
+    "candidate_id": "cand1"
+  },
+  "queryStringParameters": {
+    "date": "2026-02-10"
+  },
+  "headers": {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiNTBlM2E0ZWEtZTBiZi00NmQ2LWIxYWMtNTIyYTE0MDVhNDc3IiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwidXNlcl90eXBlIjoiYWRtaW4iLCJmaXJzdF9uYW1lIjoiSm9obiIsImxhc3RfbmFtZSI6IkRvZSIsImlhdCI6MTc3MzYzNzU3OCwiZXhwIjoxNzczNzIzOTc4fQ.x_f7m6fCc8LBN6dl8F-nKyE2A4D2NVbQ9dNuEd_qxac"
+  },
+  "requestContext": {
+  }
+}
 

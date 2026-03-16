@@ -368,7 +368,7 @@ def linkedin(assistant_id:str,date:str,admin=Depends(verify_admin)):
 
             KeyConditionExpression=
             Key("jaa_candidate_id").eq(cid)&
-            Key("created_date").between(week_start,week_end)
+            Key("create_date").between(week_start,week_end)
 
         )
 
@@ -564,8 +564,6 @@ def portfolio_job_preparation(assistant_id:str,admin=Depends(verify_admin)):
 
         item=r.get("Item")
 
-        portfolio_data=None
-
         if item:
 
             portfolio_data={
@@ -594,10 +592,6 @@ def portfolio_job_preparation(assistant_id:str,admin=Depends(verify_admin)):
 
                 },
 
-                "weekly_change_requests":weekly_changes,
-
-                "total_changes":len(weekly_changes),
-
                 "created_at":item.get("created_at"),
 
                 "updated_at":item.get("updated_at")
@@ -608,10 +602,7 @@ def portfolio_job_preparation(assistant_id:str,admin=Depends(verify_admin)):
         result["assignedCandidates"].append({
 
             "candidate_id":cid,
-
-            "total_records":1 if portfolio_data else 0,
-
-            "portfolio_preparation":portfolio_data
+            "portfolio":portfolio_data
 
         })
 
@@ -628,3 +619,25 @@ def portfolio_job_preparation(assistant_id:str,admin=Depends(verify_admin)):
 # ============================================================
 
 handler=Mangum(app)
+
+
+
+
+
+
+{
+  "httpMethod": "GET",
+  "resource": "/admin/assistants/{assistantId}/github-activities",
+  "path": "/admin/assistants/asst1/github-activities",
+  "pathParameters": {
+    "assistant_Id": "asst1"
+  },
+  "queryStringParameters": {
+    "date": "2026-02-10"
+  },
+  "headers": {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoiNTBlM2E0ZWEtZTBiZi00NmQ2LWIxYWMtNTIyYTE0MDVhNDc3IiwiZW1haWwiOiJqb2huQGV4YW1wbGUuY29tIiwidXNlcl90eXBlIjoiYWRtaW4iLCJmaXJzdF9uYW1lIjoiSm9obiIsImxhc3RfbmFtZSI6IkRvZSIsImlhdCI6MTc3MzYzNzU3OCwiZXhwIjoxNzczNzIzOTc4fQ.x_f7m6fCc8LBN6dl8F-nKyE2A4D2NVbQ9dNuEd_qxac"
+  },
+  "requestContext": {
+  }
+}
