@@ -525,12 +525,11 @@ def github(assistant_id:str,date:str,admin=Depends(verify_admin)):
 # PORTFOLIO JOB PREPARATION API
 # ============================================================
 
-@app.get("/admin/assistants/{assistant_id}/portfolio-job-preparation")
-def portfolio_job_preparation(assistant_id:str,date:str,admin=Depends(verify_admin)):
+@app.get("/admin/assistants/{assistant_id}/portfolio")
+def portfolio_job_preparation(assistant_id:str,admin=Depends(verify_admin)):
 
     start_time=datetime.now()
 
-    week_start,week_end=get_week_range(date)
 
     _,_,_,portfolio_table=get_candidate_tables()
 
@@ -539,10 +538,6 @@ def portfolio_job_preparation(assistant_id:str,date:str,admin=Depends(verify_adm
     result={
 
         "assistant_id":assistant_id,
-
-        "week_start_date":week_start,
-
-        "week_end_date":week_end,
 
         "total_candidates":len(candidates),
 
@@ -572,20 +567,6 @@ def portfolio_job_preparation(assistant_id:str,date:str,admin=Depends(verify_adm
         portfolio_data=None
 
         if item:
-
-            # Filter weekly change requests if dates exist
-            weekly_changes=[]
-
-            for change in item.get("change_requests",[]):
-
-                change_date=change.get("created_date")
-
-                if change_date:
-
-                    if week_start<=change_date<=week_end:
-
-                        weekly_changes.append(change)
-
 
             portfolio_data={
 
