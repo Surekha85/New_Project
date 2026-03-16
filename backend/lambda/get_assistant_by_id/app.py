@@ -4,16 +4,16 @@ import jwt
 import boto3
 import logging
 
-from datetime import datetime,timedelta,timezone
+from datetime import datetime,timedelta
 from decimal import Decimal
-from fastapi import FastAPI,Path,Query,Request,HTTPException,Depends
+from fastapi import FastAPI,Request,HTTPException,Depends
 from fastapi.responses import JSONResponse
 from boto3.dynamodb.conditions import Key
 from mangum import Mangum
 
 
 # ============================================================
-# Logging
+# Logger
 # ============================================================
 
 logger=logging.getLogger()
@@ -40,16 +40,12 @@ sts_client=boto3.client("sts")
 # ============================================================
 
 JWT_SECRET_CACHE=None
-
-ASSISTANT_TABLE_CACHE=None
-ASSISTANT_ROLE_EXPIRY=None
-
-CANDIDATE_DYNAMO_CACHE=None
-CANDIDATE_ROLE_EXPIRY=None
+ASSISTANT_TABLE=None
+CANDIDATE_DYNAMO=None
 
 
 # ============================================================
-# Decimal Converter
+# Convert DynamoDB Decimal → JSON safe
 # ============================================================
 
 def convert_decimal(obj):
@@ -77,194 +73,140 @@ def get_jwt_secret():
     if JWT_SECRET_CACHE:
         return JWT_SECRET_CACHE
 
-    secret_name=os.environ["JWT_SECRET_NAME"]
-
     response=secrets_client.get_secret_value(
-        SecretId=secret_name
+        SecretId=os.environ["JWT_SECRET_NAME"]
     )
 
-    secret=json.loads(response["SecretString"])
-
-    JWT_SECRET_CACHE=secret["jwt_secret"]
+    JWT_SECRET_CACHE=json.loads(
+        response["SecretString"]
+    )["jwt_secret"]
 
     return JWT_SECRET_CACHE
 
 
 # ============================================================
-# Verify Admin
+# Verify admin token
 # ============================================================
 
 def verify_admin(request:Request):
 
-    auth_header=request.headers.get("Authorization")
+    auth=request.headers.get("Authorization")
 
-    if not auth_header:
-        raise HTTPException(401,"Authorization header missing")
+    if not auth:
+        raise HTTPException(401,"Authorization missing")
 
-    parts=auth_header.split(" ")
+    token=auth.split(" ")[1]
 
-    if len(parts)!=2 or parts[0]!="Bearer":
-        raise HTTPException(401,"Invalid Authorization header")
+    decoded=jwt.decode(
+        token,
+        get_jwt_secret(),
+        algorithms=["HS256"]
+    )
 
-    token=parts[1]
+    if decoded.get("user_type")!="admin":
+        raise HTTPException(403,"Unauthorized")
 
-    try:
-
-        decoded=jwt.decode(
-            token,
-            get_jwt_secret(),
-            algorithms=["HS256"]
-        )
-
-        if decoded.get("user_type")!="admin":
-            raise HTTPException(403,"Unauthorized")
-
-        return decoded
-
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(401,"Token expired")
-
-    except jwt.InvalidTokenError:
-        raise HTTPException(401,"Invalid token")
+    return decoded
 
 
 # ============================================================
-# Assistant Table (STS Cached)
+# Assistant table
 # ============================================================
 
 def get_assistant_table():
 
-    global ASSISTANT_TABLE_CACHE
-    global ASSISTANT_ROLE_EXPIRY
+    global ASSISTANT_TABLE
 
-    if ASSISTANT_TABLE_CACHE and ASSISTANT_ROLE_EXPIRY:
+    if ASSISTANT_TABLE:
+        return ASSISTANT_TABLE
 
-        if datetime.now(timezone.utc)<ASSISTANT_ROLE_EXPIRY:
-            return ASSISTANT_TABLE_CACHE
+    assumed=sts_client.assume_role(
 
-    role_arn=os.environ["ASSISTANT_DYNAMO_ROLE_ARN"]
-
-    assumed_role=sts_client.assume_role(
-
-        RoleArn=role_arn,
-        RoleSessionName="assistant-session"
+        RoleArn=os.environ["ASSISTANT_DYNAMO_ROLE_ARN"],
+        RoleSessionName="assistant"
 
     )
 
-    credentials=assumed_role["Credentials"]
-
-    ASSISTANT_ROLE_EXPIRY=credentials["Expiration"]
+    creds=assumed["Credentials"]
 
     dynamodb=boto3.resource(
 
         "dynamodb",
 
-        aws_access_key_id=credentials["AccessKeyId"],
-        aws_secret_access_key=credentials["SecretAccessKey"],
-        aws_session_token=credentials["SessionToken"]
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"]
 
     )
 
-    ASSISTANT_TABLE_CACHE=dynamodb.Table(
+    ASSISTANT_TABLE=dynamodb.Table(
         os.environ["ASSISTANTS_TABLE"]
     )
 
-    return ASSISTANT_TABLE_CACHE
+    return ASSISTANT_TABLE
 
 
 # ============================================================
-# Candidate Dynamo (STS Cached)
-# ============================================================
-
-def get_candidate_dynamodb():
-
-    global CANDIDATE_DYNAMO_CACHE
-    global CANDIDATE_ROLE_EXPIRY
-
-    if CANDIDATE_DYNAMO_CACHE and CANDIDATE_ROLE_EXPIRY:
-
-        if datetime.now(timezone.utc)<CANDIDATE_ROLE_EXPIRY:
-            return CANDIDATE_DYNAMO_CACHE
-
-    role_arn=os.environ["CANDIDATE_DYNAMO_ROLE_ARN"]
-
-    assumed_role=sts_client.assume_role(
-
-        RoleArn=role_arn,
-        RoleSessionName="candidate-session"
-
-    )
-
-    credentials=assumed_role["Credentials"]
-
-    CANDIDATE_ROLE_EXPIRY=credentials["Expiration"]
-
-    CANDIDATE_DYNAMO_CACHE=boto3.resource(
-
-        "dynamodb",
-
-        aws_access_key_id=credentials["AccessKeyId"],
-        aws_secret_access_key=credentials["SecretAccessKey"],
-        aws_session_token=credentials["SessionToken"]
-
-    )
-
-    return CANDIDATE_DYNAMO_CACHE
-
-
-# ============================================================
-# Candidate Tables Getter
+# Candidate tables
 # ============================================================
 
 def get_candidate_tables():
 
-    dynamodb=get_candidate_dynamodb()
+    global CANDIDATE_DYNAMO
 
-    job_table=dynamodb.Table(
-        os.environ["JOB_APPLICATIONS_TABLE"]
+    if not CANDIDATE_DYNAMO:
+
+        assumed=sts_client.assume_role(
+
+            RoleArn=os.environ["CANDIDATE_DYNAMO_ROLE_ARN"],
+            RoleSessionName="candidate"
+
+        )
+
+        creds=assumed["Credentials"]
+
+        CANDIDATE_DYNAMO=boto3.resource(
+
+            "dynamodb",
+
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"]
+
+        )
+
+    return(
+
+        CANDIDATE_DYNAMO.Table(os.environ["JOB_APPLICATIONS_TABLE"]),
+        CANDIDATE_DYNAMO.Table(os.environ["LINKEDIN_ACTIVITIES_TABLE"]),
+        CANDIDATE_DYNAMO.Table(os.environ["GITHUB_ACTIVITIES_TABLE"]),
+        CANDIDATE_DYNAMO.Table(os.environ["PORTFOLIO_TABLE"])
+
     )
-
-    linkedin_table=dynamodb.Table(
-        os.environ["LINKEDIN_ACTIVITIES_TABLE"]
-    )
-
-    github_table=dynamodb.Table(
-        os.environ["GITHUB_ACTIVITIES_TABLE"]
-    )
-
-    portfolio_table=dynamodb.Table(
-        os.environ["PORTFOLIO_TABLE"]
-    )
-
-    return job_table,linkedin_table,github_table,portfolio_table
 
 
 # ============================================================
-# Get Assigned Candidates
+# Get assigned candidates
 # ============================================================
 
 def get_assigned_candidates(assistant_id):
 
     table=get_assistant_table()
 
-    response=table.get_item(
-
-        Key={"assistantId":assistant_id},
-
-        ProjectionExpression="assigned_candidates"
-
+    r=table.get_item(
+        Key={"assistantId":assistant_id}
     )
 
-    assistant=response.get("Item")
+    item=r.get("Item")
 
-    if not assistant:
+    if not item:
         return []
 
-    return assistant.get("assigned_candidates",[])
+    return item.get("assigned_candidates",[])
 
 
 # ============================================================
-# Week Range
+# Week range helper
 # ============================================================
 
 def get_week_range(date):
@@ -273,50 +215,40 @@ def get_week_range(date):
 
     end=start+timedelta(days=6)
 
-    return (
-
-        start.strftime("%Y-%m-%d"),
-        end.strftime("%Y-%m-%d")
-
-    )
+    return start.strftime("%Y-%m-%d"),end.strftime("%Y-%m-%d")
 
 
 # ============================================================
-# Pagination Helper
+# Query pagination helper
 # ============================================================
 
 def query_all(table,**kwargs):
 
-    response=table.query(**kwargs)
+    r=table.query(**kwargs)
 
-    items=response.get("Items",[])
+    items=r.get("Items",[])
 
-    while "LastEvaluatedKey" in response:
+    while "LastEvaluatedKey" in r:
 
-        response=table.query(
+        r=table.query(
 
-            ExclusiveStartKey=response["LastEvaluatedKey"],
+            ExclusiveStartKey=r["LastEvaluatedKey"],
             **kwargs
-
         )
 
-        items.extend(response.get("Items",[]))
+        items.extend(r.get("Items",[]))
 
     return items
 
 
 # ============================================================
-# Job Applications
+# JOB APPLICATION API
 # ============================================================
 
 @app.get("/admin/assistants/{assistant_id}/job-applications")
-def get_job_applications(
+def jobs(assistant_id:str,date:str,admin=Depends(verify_admin)):
 
-    assistant_id:str=Path(...),
-    date:str=Query(...),
-    admin=Depends(verify_admin)
-
-):
+    start_time=datetime.now()
 
     week_start,week_end=get_week_range(date)
 
@@ -324,9 +256,24 @@ def get_job_applications(
 
     candidates=get_assigned_candidates(assistant_id)
 
-    result=[]
+    result={
 
-    for candidate_id in candidates:
+        "assistant_id":assistant_id,
+        "week_start_date":week_start,
+        "week_end_date":week_end,
+        "total_candidates":len(candidates),
+        "assignedCandidates":[],
+        "message":""
+
+    }
+
+    if not candidates:
+
+        result["message"]="No candidates assigned"
+
+        return JSONResponse(result)
+
+    for cid in candidates:
 
         items=query_all(
 
@@ -335,51 +282,58 @@ def get_job_applications(
             IndexName="candidate_date_index",
 
             KeyConditionExpression=
-
-            Key("jaa_candidate_id").eq(candidate_id)&
-
-            Key("application_date").between(
-                week_start,
-                week_end
-            )
+            Key("jaa_candidate_id").eq(cid)&
+            Key("application_date").between(week_start,week_end)
 
         )
 
-        jobs=[]
+        applications=[]
 
-        for j in items:
+        for item in items:
 
-            jobs.append({
+            applications.append({
 
-                "job_id":j.get("job_id"),
-                "company_name":j.get("company_name"),
-                "job_title":j.get("job_title"),
-                "application_date":j.get("application_date")
+                "candidate_id": item.get("jaa_candidate_id"),
+                "job_id": item.get("job_id"),
+                "job_title": item.get("job_title"),
+                "company_name": item.get("company_name"),
+                "application_date": item.get("application_date"),
+                "application_link": item.get("application_link"),
+                "applied_via": item.get("applied_via"),
+                "approval_status": item.get("approval_status"),
+                "ats_score": item.get("ats_score"),
+                "ai_detection_score": item.get("ai_detection_score"),
+                "resume_s3_url": item.get("resume_s3_url"),
+                "employment_type": item.get("employment_type"),
+                "experience": item.get("experience"),
+                "created_at": item.get("created_at"),
+                "updated_at": item.get("updated_at")
 
             })
 
-        result.append({
+        result["assignedCandidates"].append({
 
-            "candidate_id":candidate_id,
-            "job_applications":jobs
+            "candidate_id":cid,
+            "total_records":len(applications),
+            "job_applications":applications
 
         })
+
+    result["execution_time"]=str(datetime.now()-start_time)
+
+    result["message"]="Success"
 
     return JSONResponse(convert_decimal(result))
 
 
 # ============================================================
-# LinkedIn Activities
+# LINKEDIN API
 # ============================================================
 
 @app.get("/admin/assistants/{assistant_id}/linkedin-activities")
-def get_linkedin_activities(
+def linkedin(assistant_id:str,date:str,admin=Depends(verify_admin)):
 
-    assistant_id:str=Path(...),
-    date:str=Query(...),
-    admin=Depends(verify_admin)
-
-):
+    start_time=datetime.now()
 
     week_start,week_end=get_week_range(date)
 
@@ -387,9 +341,24 @@ def get_linkedin_activities(
 
     candidates=get_assigned_candidates(assistant_id)
 
-    result=[]
+    result={
 
-    for candidate_id in candidates:
+        "assistant_id":assistant_id,
+        "week_start_date":week_start,
+        "week_end_date":week_end,
+        "total_candidates":len(candidates),
+        "assignedCandidates":[],
+        "message":""
+
+    }
+
+    if not candidates:
+
+        result["message"]="No candidates assigned"
+
+        return JSONResponse(result)
+
+    for cid in candidates:
 
         items=query_all(
 
@@ -398,52 +367,56 @@ def get_linkedin_activities(
             IndexName="CreatedAtIndex",
 
             KeyConditionExpression=
-
-            Key("jaa_candidate_id").eq(candidate_id)&
-
-            Key("create_date").between(
-                week_start,
-                week_end
-            )
+            Key("jaa_candidate_id").eq(cid)&
+            Key("created_date").between(week_start,week_end)
 
         )
 
         activities=[]
 
-        for l in items:
+        for item in items:
 
             activities.append({
 
-                "task_id":l.get("task_id"),
-                "task_type":l.get("task_type"),
-                "title":l.get("title"),
-                "status":l.get("status"),
-                "create_date":l.get("create_date")
+                "task_id": item.get("task_id"),
+                "task_type": item.get("task_type"),
+                "title": item.get("title"),
+                "status": item.get("status"),
+                "due_date": item.get("due_date"),
+                "linkedin_profile_url": item.get("linkedin_profile_url"),
+                "recipient_name": item.get("recipient_name"),
+                "recipient_title": item.get("recipient_title"),
+                "created_date": item.get("created_date"),
+                "created_by": item.get("created_by"),
+                "created_at": item.get("created_at"),
+                "updated_at": item.get("updated_at"),
+                "completed_at": item.get("completed_at")
 
             })
 
-        result.append({
+        result["assignedCandidates"].append({
 
-            "candidate_id":candidate_id,
+            "candidate_id":cid,
+            "total_records":len(activities),
             "linkedin_activities":activities
 
         })
+
+    result["execution_time"]=str(datetime.now()-start_time)
+
+    result["message"]="Success"
 
     return JSONResponse(convert_decimal(result))
 
 
 # ============================================================
-# GitHub Activities
+# GITHUB API
 # ============================================================
 
 @app.get("/admin/assistants/{assistant_id}/github-activities")
-def get_github_activities(
+def github(assistant_id:str,date:str,admin=Depends(verify_admin)):
 
-    assistant_id:str=Path(...),
-    date:str=Query(...),
-    admin=Depends(verify_admin)
-
-):
+    start_time=datetime.now()
 
     week_start,week_end=get_week_range(date)
 
@@ -451,135 +424,226 @@ def get_github_activities(
 
     candidates=get_assigned_candidates(assistant_id)
 
-    result=[]
+    result={
 
-    for candidate_id in candidates:
+        "assistant_id":assistant_id,
+        "week_start_date":week_start,
+        "week_end_date":week_end,
+        "total_candidates":len(candidates),
+        "assignedCandidates":[],
+        "message":""
 
-        items=query_all(
+    }
+
+    if not candidates:
+
+        result["message"]="No candidates assigned"
+
+        return JSONResponse(result)
+
+    for cid in candidates:
+
+        projects=query_all(
 
             github_table,
 
             IndexName="CandidateIndex",
 
             KeyConditionExpression=
-            Key("jaa_candidate_id").eq(candidate_id)
+            Key("jaa_candidate_id").eq(cid)
 
         )
 
-        projects=[]
+        project_data=[]
 
-        for item in items:
+        for project in projects:
 
-            if item.get("entity_type")!="PROJECT":
+            if project.get("entity_type")!="PROJECT":
                 continue
 
-            project_id=item.get("project_id")
+            project_id=project.get("project_id")
 
-            commits=query_all(
-
-                github_table,
+            commits=github_table.query(
 
                 KeyConditionExpression=
-
                 Key("project_id").eq(project_id)&
-
-                Key("commit_date").between(
-                    week_start,
-                    week_end
-                )
+                Key("commit_date").between(week_start,week_end)
 
             )
 
-            commit_list=[]
+            commit_list=[
 
-            for c in commits:
+                {
 
-                if c.get("entity_type")!="COMMIT":
-                    continue
-
-                commit_list.append({
-
-                    "commit_id":c.get("id"),
+                    "id":c.get("id"),
                     "message":c.get("message"),
                     "author":c.get("author"),
-                    "commit_date":c.get("commit_date")
+                    "commit_date":c.get("commit_date"),
+                    "files_changed":c.get("files_changed"),
+                    "commit_url":c.get("commit_url")
 
-                })
+                }
 
-            projects.append({
+                for c in commits.get("Items",[])
+                if c.get("entity_type")=="COMMIT"
+
+            ]
+
+            project_data.append({
 
                 "project_id":project_id,
-                "project_name":item.get("project_name"),
-                "repo_url":item.get("repo_url"),
+                "project_name":project.get("project_name"),
+                "repo_url":project.get("repo_url"),
+                "status":project.get("status"),
+                "repo_visibility":project.get("repo_visibility"),
+                "start_date":project.get("start_date"),
+                "estimation_date":project.get("estimation_date"),
+                "repo_created_at":project.get("repo_created_at"),
                 "commits":commit_list
 
             })
 
-        result.append({
+        result["assignedCandidates"].append({
 
-            "candidate_id":candidate_id,
-            "github_projects":projects
+            "candidate_id":cid,
+            "total_records":len(project_data),
+            "github_projects":project_data
 
         })
+
+    result["execution_time"]=str(datetime.now()-start_time)
+
+    result["message"]="Success"
 
     return JSONResponse(convert_decimal(result))
 
 
 # ============================================================
-# Portfolio
+# PORTFOLIO API
+# ============================================================
+# ============================================================
+# PORTFOLIO JOB PREPARATION API
 # ============================================================
 
-@app.get("/admin/assistants/{assistant_id}/portfolio")
-def get_portfolio(
+@app.get("/admin/assistants/{assistant_id}/portfolio-job-preparation")
+def portfolio_job_preparation(assistant_id:str,date:str,admin=Depends(verify_admin)):
 
-    assistant_id:str=Path(...),
-    admin=Depends(verify_admin)
+    start_time=datetime.now()
 
-):
+    week_start,week_end=get_week_range(date)
 
     _,_,_,portfolio_table=get_candidate_tables()
 
     candidates=get_assigned_candidates(assistant_id)
 
-    result=[]
+    result={
 
-    for candidate_id in candidates:
+        "assistant_id":assistant_id,
 
-        response=portfolio_table.get_item(
+        "week_start_date":week_start,
 
-            Key={
-                "jaa_candidate_id":candidate_id
-            }
+        "week_end_date":week_end,
+
+        "total_candidates":len(candidates),
+
+        "assignedCandidates":[],
+
+        "message":""
+
+    }
+
+    if not candidates:
+
+        result["message"]="No candidates assigned"
+
+        return JSONResponse(result)
+
+
+    for cid in candidates:
+
+        r=portfolio_table.get_item(
+
+            Key={"jaa_candidate_id":cid}
 
         )
 
-        item=response.get("Item")
+        item=r.get("Item")
 
-        portfolio=None
+        portfolio_data=None
 
         if item:
 
-            portfolio={
+            # Filter weekly change requests if dates exist
+            weekly_changes=[]
+
+            for change in item.get("change_requests",[]):
+
+                change_date=change.get("created_date")
+
+                if change_date:
+
+                    if week_start<=change_date<=week_end:
+
+                        weekly_changes.append(change)
+
+
+            portfolio_data={
+
+                "candidate_id":item.get("jaa_candidate_id"),
 
                 "portfolio_id":item.get("portfolio_id"),
+
                 "status":item.get("status"),
-                "deployment_url":item.get("vercel_deployment_url"),
-                "deployment_status":item.get("deployment_status")
+
+                "github":{
+
+                    "repo_url":item.get("github_repo_url"),
+
+                    "repo_name":item.get("github_repo_name")
+
+                },
+
+                "deployment":{
+
+                    "vercel_project":item.get("vercel_project_name"),
+
+                    "deployment_url":item.get("vercel_deployment_url"),
+
+                    "deployment_status":item.get("deployment_status")
+
+                },
+
+                "weekly_change_requests":weekly_changes,
+
+                "total_changes":len(weekly_changes),
+
+                "created_at":item.get("created_at"),
+
+                "updated_at":item.get("updated_at")
 
             }
 
-        result.append({
 
-            "candidate_id":candidate_id,
-            "portfolio":portfolio
+        result["assignedCandidates"].append({
+
+            "candidate_id":cid,
+
+            "total_records":1 if portfolio_data else 0,
+
+            "portfolio_preparation":portfolio_data
 
         })
+
+
+    result["execution_time"]=str(datetime.now()-start_time)
+
+    result["message"]="Success"
 
     return JSONResponse(convert_decimal(result))
 
 
 # ============================================================
-# Lambda Handler
+# Lambda handler
 # ============================================================
 
 handler=Mangum(app)
