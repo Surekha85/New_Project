@@ -416,6 +416,35 @@ Resources:
       ParentId: !Ref GetAssistantsResource
       PathPart: "{assistantId}"
       RestApiId: !Ref AdminPortalApi
+  
+  AssistantJobApplicationsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AssistantByIdResource
+      PathPart: "job-applications"
+      RestApiId: !Ref AdminPortalApi
+
+  AssistantLinkedinResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AssistantByIdResource
+      PathPart: "linkedin-activities"
+      RestApiId: !Ref AdminPortalApi
+
+  AssistantGithubResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AssistantByIdResource
+      PathPart: "github-activities"
+      RestApiId: !Ref AdminPortalApi
+
+  AssistantPortfolioResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref AssistantByIdResource
+      PathPart: "portfolio"
+      RestApiId: !Ref AdminPortalApi
+
 
   # admin/candidates
   CandidatesResource:
@@ -538,7 +567,63 @@ Resources:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations"
-        
+  
+  GetAssistantJobApplicationsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantJobApplicationsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.assistantId: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations
+  
+  GetAssistantLinkedinMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantLinkedinResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.assistantId: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations
+
+  GetAssistantGithubMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantGithubResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.assistantId: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations
+
+  GetAssistantPortfolioMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantPortfolioResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.assistantId: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssistantByIdLambda.Arn}/invocations
+
   GetAllCandidatesMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -798,6 +883,110 @@ Resources:
             method.response.header.Access-Control-Allow-Credentials: true
 
 
+  GetAssistantJobApplicationsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantJobApplicationsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+  GetAssistantLinkedinOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantLinkedinResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+  GetAssistantGithubOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantGithubResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
+  GetAssistantPortfolioOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AdminPortalApi
+      ResourceId: !Ref AssistantPortfolioResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Credentials: "'true'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Credentials: true
+
   GetAllCandidatesOptionsMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -1025,6 +1214,38 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/assistants/*"
 
+  GetAssistantJobApplicationsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAssistantByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/${Stage}/GET/admin/assistants/*/job-applications"
+  
+  GetAssistantLinkedinPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAssistantByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/${Stage}/GET/admin/assistants/*/linkedin-activities"
+  
+  GetAssistantGithubPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAssistantByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/${Stage}/GET/admin/assistants/*/github-activities"
+
+  GetAssistantPortfolioPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GetAssistantByIdLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/${Stage}/GET/admin/assistants/*/portfolio"
+
   GetAllCandidatesLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -1125,6 +1346,10 @@ Resources:
       - CreateAssistantMethod
       - GetAssistantsMethod
       - GetAssistantByIdMethod
+      - GetAssistantJobApplicationsMethod
+      - GetAssistantLinkedinMethod
+      - GetAssistantGithubMethod
+      - GetAssistantPortfolioMethod
       - GetAllCandidatesMethod
       - GetCandidateProfileByIdMethod
       - AssignAssistantForCandidateMethod
@@ -1138,6 +1363,10 @@ Resources:
       - CreateAssistantsOptionsMethod
       - GetAllAssistantsOptionsMethod
       - GetAssistantByIdOptionsMethod
+      - GetAssistantJobApplicationsOptionsMethod
+      - GetAssistantLinkedinOptionsMethod
+      - GetAssistantGithubOptionsMethod
+      - GetAssistantPortfolioOptionsMethod
       - GetAllCandidatesOptionsMethod
       - CandidateProfileByIdOptionsMethod
       - AdminAssignsAssistantOptionsMethod
@@ -1151,6 +1380,10 @@ Resources:
       - CreateAssistantsLambdaPermission
       - GetAllAssistantsLambdaPermission
       - GetAssistantByIdLambdaPermission
+      - GetAssistantJobApplicationsPermission
+      - GetAssistantLinkedinPermission
+      - GetAssistantGithubPermission
+      - GetAssistantPortfolioPermission
       - GetAllCandidatesLambdaPermission
       - GetCandidateProfileByIdLambdaPermission
       - AssignAssistantForCandidateLambdaPermission
@@ -1158,8 +1391,6 @@ Resources:
       - GetCandidateGithubPermission
       - GetCandidateLinkedinPermission
       - GetCandidatePortfolioPermission
-
-
 
 Outputs:
   # API Gateway
