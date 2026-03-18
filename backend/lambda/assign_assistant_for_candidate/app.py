@@ -17,8 +17,9 @@ ROLE_EXPIRY={}
 
 # CORS headers
 def get_cors_headers():
+    origin = 'http://localhost:3000'
     return{
-        "Access-Control-Allow-Origin":"https://www.admin.jobsyme.com",
+        "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers":"Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
         "Access-Control-Allow-Methods":"POST,OPTIONS",
         "Access-Control-Allow-Credentials":"true"

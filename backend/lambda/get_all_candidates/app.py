@@ -17,7 +17,7 @@ JWT_SECRET_CACHE = None
 # CORS
 # ---------------------------------------------------
 def get_cors_headers():
-    origin = "https://www.admin.jobsyme.com"
+    origin = 'http://localhost:3000'
     return {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",

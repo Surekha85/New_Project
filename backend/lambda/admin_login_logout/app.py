@@ -21,7 +21,7 @@ JWT_SECRET_CACHE = None
 
 def get_cors_headers():
     """Return CORS headers based on stage"""
-    origin = "https://www.admin.jobsyme.com"
+    origin = 'http://localhost:3000'
 
     return {
         'Access-Control-Allow-Origin': origin,
