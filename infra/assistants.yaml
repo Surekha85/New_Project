@@ -1212,7 +1212,7 @@ Resources:
       FunctionName: !Ref GetAssistantByIdLambda
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/assistants/*"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/assistants"
 
   GetAssistantJobApplicationsPermission:
     Type: AWS::Lambda::Permission
@@ -1260,7 +1260,7 @@ Resources:
       FunctionName: !Ref GetCandidateProfileByIdLambda
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/candidates/*"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminPortalApi}/*/GET/admin/candidates"
 
   AssignAssistantForCandidateLambdaPermission:
     Type: AWS::Lambda::Permission
