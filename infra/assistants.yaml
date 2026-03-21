@@ -1313,10 +1313,9 @@ Resources:
       ResponseType: DEFAULT_4XX
       RestApiId: !Ref AdminPortalApi
       ResponseParameters:
-        gatewayresponse.header.Access-Control-Allow-Origin: "method.request.header.Origin"
-        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
         gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
-        gatewayresponse.header.Access-Control-Allow-Credentials: "'true'"
 
   GatewayResponse5XX:
     Type: AWS::ApiGateway::GatewayResponse
