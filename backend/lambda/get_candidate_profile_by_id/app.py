@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Path, Query, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from boto3.dynamodb.conditions import Key
 from mangum import Mangum
 
@@ -27,6 +28,27 @@ logger.setLevel(logging.INFO)
 
 app = FastAPI()
 
+# ✅ CORS MIDDLEWARE (CRITICAL FIX)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ GLOBAL OPTIONS HANDLER (CRITICAL FIX)
+@app.options("/{full_path:path}")
+def options_handler(full_path: str):
+    return JSONResponse(
+        status_code=200,
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+        }
+    )
 
 # ---------------------------------------------------
 # AWS Clients
@@ -411,7 +433,7 @@ def get_linkedin_weekly(
                 "linkedin_profile_url": item.get("linkedin_profile_url"),
                 "recipient_name": item.get("recipient_name"),
                 "recipient_title": item.get("recipient_title"),
-                "created_date": item.get("created_date"),
+                "created_date": item.get("create_date"),
                 "created_by": item.get("created_by"),
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
