@@ -9,7 +9,7 @@ Parameters:
     Description: Deployment stage
   AdminApiDeploymentVersion:
     Type: String
-    Default: "Version1"
+    Default: "Version2"
     Description: Version to force API Gateway redeployment
   
   CandidateAccountId:
