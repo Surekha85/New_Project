@@ -294,7 +294,7 @@ Resources:
           JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           CANDIDATES_TABLE: !Ref CandidatesTableName
           PAYMENTS_TABLE: !Ref PaymentsTableName
-          CRYPTO_SECRET_KEY: 'Z0FBQUFBQmxaWk9lQk9yV3RzV1p5b2d3V1hZc3ZpQ2JYd1p5T2d3c3ZpQ2JYd1p5T2d3V1hZc3ZpQ2JYd1p5T2d3V1hZc3Y='
+          CRYPTO_SECRET_KEY: 'q1v7Z5b3Yp9TQyQY4c6p1gJ0Xk8mWn2R3t4u5v6w7x8='
 
           ASSISTANTS_TABLE: !Ref AssistantsTableName
 
