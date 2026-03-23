@@ -5,14 +5,19 @@ import jwt
 from decimal import Decimal
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
+from cryptography.fernet import Fernet
+
 
 # ---------------------------------------------------
 # GLOBALS
 # ---------------------------------------------------
 secrets_client = boto3.client("secretsmanager")
 JWT_SECRET_CACHE = None
+SECRET_KEY = os.environ["CRYPTO_SECRET_KEY"]
+fernet = Fernet(SECRET_KEY.encode())
 
-
+def decrypt_password(encrypted_password):
+    return fernet.decrypt(encrypted_password.encode()).decode()
 # ---------------------------------------------------
 # CORS
 # ---------------------------------------------------
@@ -302,6 +307,10 @@ def get_all_candidates(candidates):
     response = []
 
     for item in candidates:
+
+        if item.get("dedicatedGmailAccount", {}).get("password"):
+            encrypted = item["dedicatedGmailAccount"]["password"]
+            item["dedicatedGmailAccount"]["password"] = decrypt_password(encrypted)
 
         candidate = {
             "jaa_candidate_id": item.get("jaa_candidate_id"),
