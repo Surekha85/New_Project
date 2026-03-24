@@ -20,7 +20,7 @@ fernet = Fernet(SECRET_KEY.encode())
 def decrypt_password(encrypted_password):
     return fernet.decrypt(encrypted_password.encode()).decode()
 
-    
+
 # ---------------------------------------------------
 # Logging
 # ---------------------------------------------------
@@ -237,7 +237,7 @@ def convert(obj):
 
 
 
-@app.get("/admin/candidates/{candidate_id}}")
+@app.get("/admin/candidates/{candidate_id}")
 def get_candidate_profile(candidate_id: str, request: Request):
 
     cors = get_cors_headers()
