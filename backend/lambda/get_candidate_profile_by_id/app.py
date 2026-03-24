@@ -12,8 +12,15 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from boto3.dynamodb.conditions import Key
 from mangum import Mangum
+from cryptography.fernet import Fernet
 
 
+fernet = Fernet(SECRET_KEY.encode())
+
+def decrypt_password(encrypted_password):
+    return fernet.decrypt(encrypted_password.encode()).decode()
+
+    
 # ---------------------------------------------------
 # Logging
 # ---------------------------------------------------
@@ -116,6 +123,7 @@ candidate_role = os.environ["CANDIDATE_DYNAMO_ROLE_ARN"]
 
 dynamodb = assume_role(candidate_role)
 
+candidates_table = dynamodb.Table(os.environ["CANDIDATES_TABLE"])
 job_applications_table = dynamodb.Table(os.environ["JOB_APPLICATIONS_TABLE"])
 github_activities_table = dynamodb.Table(os.environ["GITHUB_ACTIVITIES_TABLE"])
 linkedin_activities_table = dynamodb.Table(os.environ["LINKEDIN_ACTIVITIES_TABLE"])
@@ -226,6 +234,95 @@ def convert(obj):
         return int(obj) if obj % 1 == 0 else float(obj)
 
     return obj
+
+
+
+@app.get("/admin/candidates/{candidate_id}}")
+def get_candidate_profile(candidate_id: str, request: Request):
+
+    cors = get_cors_headers()
+
+    try:
+
+        response = candidates_table.get_item(
+            Key={"jaa_candidate_id": candidate_id}
+        )
+
+        item = response.get("Item")
+        logging.info(f"Fetched candidate: {item}")
+
+        if item.get("dedicatedGmailAccount", {}).get("password"):
+            encrypted = item["dedicatedGmailAccount"]["password"]
+            item["dedicatedGmailAccount"]["password"] = decrypt_password(encrypted)
+
+        candidate_response = {
+            "jaa_candidate_id": item.get("jaa_candidate_id"),
+            "user_id": item.get("user_id"),
+            "first_name": item.get("first_name"),
+            "last_name": item.get("last_name"),
+            "email": item.get("email"),
+            "phone": item.get("phone"),
+            "github": item.get("github"),
+            "linkedin": item.get("linkedin"),
+            "resumeUrl": item.get("resumeUrl"),
+            "resumeFileExtension": item.get("resumeFileExtension"),
+            "assistantAssignedTo": item.get("assistantAssignedTo"),
+            "address": {
+                "street": item.get("address", {}).get("street"),
+                "city": item.get("address", {}).get("city"),
+                "state": item.get("address", {}).get("state"),
+                "country": item.get("address", {}).get("country"),
+                "zip": item.get("address", {}).get("zip")
+            },
+            "careerDetails": {
+                "highestEducation": item.get("careerDetails", {}).get("highestEducation"),
+                "yearsExperience": item.get("careerDetails", {}).get("yearsExperience"),
+                "skills": item.get("careerDetails", {}).get("skills"),
+                "preferredJobType": item.get("careerDetails", {}).get("preferredJobType"),
+                "dateAvailable": item.get("careerDetails", {}).get("dateAvailable"),
+                "workAuthorized": item.get("careerDetails", {}).get("workAuthorized"),
+                "visaRequired": item.get("careerDetails", {}).get("visaRequired"),
+                "validDriverLicense": item.get("careerDetails", {}).get("validDriverLicense"),
+                "willingToRelocate": item.get("careerDetails", {}).get("willingToRelocate"),
+                "vaccinationStatus": item.get("careerDetails", {}).get("vaccinationStatus")
+            },
+            "jobPreferences": {
+                "preferredJobTitles": item.get("jobPreferences", {}).get("preferredJobTitles"),
+                "preferredJobType": item.get("jobPreferences", {}).get("preferredJobType"),
+                "blockedCompanies": item.get("jobPreferences", {}).get("blockedCompanies"),
+                "salaryExpectation": item.get("jobPreferences", {}).get("salaryExpectation"),
+                "timeZone": item.get("jobPreferences", {}).get("timeZone")
+            },
+            "demographic": {
+                "gender": item.get("demographic", {}).get("gender"),
+                "pronouns": item.get("demographic", {}).get("pronouns"),
+                "ethnicIdentity": item.get("demographic", {}).get("ethnicIdentity"),
+                "sexualOrientation": item.get("demographic", {}).get("sexualOrientation"),
+                "veteranStatus": item.get("demographic", {}).get("veteranStatus"),
+                "disabilityStatus": item.get("demographic", {}).get("disabilityStatus")
+            },
+            "dedicatedGmailAccount": {
+                "email": item.get("dedicatedGmailAccount", {}).get("email"),
+                "password": item.get("dedicatedGmailAccount", {}).get("password")
+            },
+            "createdAt": item.get("createdAt"),
+            "updatedAt": item.get("updatedAt")
+        }
+
+        return JSONResponse(
+            status_code=200,
+            content=convert(candidate_response),
+            headers=cors
+        )
+
+    except HTTPException as e:
+
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"message": e.detail},
+            headers=cors
+        )
+
 
 
 # ===================================================
