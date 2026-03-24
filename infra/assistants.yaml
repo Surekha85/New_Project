@@ -1386,7 +1386,6 @@ Resources:
       - GetAssistantPortfolioPermission
       - GetAllCandidatesLambdaPermission
       - GetCandidateProfileByIdLambdaPermission
-      - GetCandidateByIdPermission
       - AssignAssistantForCandidateLambdaPermission
       - GetCandidateJobApplicationsPermission
       - GetCandidateGithubPermission
