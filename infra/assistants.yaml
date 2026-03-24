@@ -324,6 +324,7 @@ Resources:
           ASSISTANT_DYNAMO_ROLE_ARN: !Ref AssistantCrossAccountRoleArn
           JWT_SECRET_NAME: !Sub "/admin/jwt-secret"
           CANDIDATES_TABLE: !Ref CandidatesTableName
+          CRYPTO_SECRET_KEY: 'q1v7Z5b3Yp9TQyQY4c6p1gJ0Xk8mWn2R3t4u5v6w7x8='
 
           ASSISTANTS_TABLE: !Ref AssistantsTableName
 
