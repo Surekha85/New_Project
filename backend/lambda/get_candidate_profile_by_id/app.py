@@ -14,7 +14,7 @@ from boto3.dynamodb.conditions import Key
 from mangum import Mangum
 from cryptography.fernet import Fernet
 
-
+SECRET_KEY = os.environ["CRYPTO_SECRET_KEY"]
 fernet = Fernet(SECRET_KEY.encode())
 
 def decrypt_password(encrypted_password):
