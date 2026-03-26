@@ -290,6 +290,7 @@ def get_candidate_profile(candidate_id: str, request: Request):
                 "preferredJobTitles": item.get("jobPreferences", {}).get("preferredJobTitles"),
                 "preferredJobType": item.get("jobPreferences", {}).get("preferredJobType"),
                 "blockedCompanies": item.get("jobPreferences", {}).get("blockedCompanies"),
+                "recentInterviewedCompanies": item.get("jobPreferences", {}).get("recentInterviewedCompanies"),
                 "salaryExpectation": item.get("jobPreferences", {}).get("salaryExpectation"),
                 "timeZone": item.get("jobPreferences", {}).get("timeZone")
             },
