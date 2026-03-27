@@ -287,6 +287,68 @@ def handler(event, context):
                 "body": json.dumps({"message": "Invalid JSON"})
             }
 
+        
+        # -----------------------------------------
+        # PASSWORD UPDATE USING assistantId
+        # -----------------------------------------
+        assistant_id = body.get("assistantId")
+        new_password = body.get("new_password")
+
+        if assistant_id:
+            if not new_password:
+                return {
+                    "statusCode": 400,
+                    "headers": cors,
+                    "body": json.dumps({"message": "new_password is required"})
+                }
+
+            # Validate password strength
+            is_valid_password, password_error = validate_password_strength(new_password)
+            if not is_valid_password:
+                return {
+                    "statusCode": 400,
+                    "headers": cors,
+                    "body": json.dumps({"message": password_error})
+                }
+
+            assistants_table = get_cross_account_table()
+
+            # Check assistant exists
+            response = assistants_table.get_item(
+                Key={"assistantId": assistant_id}
+            )
+
+            if "Item" not in response:
+                return {
+                    "statusCode": 404,
+                    "headers": cors,
+                    "body": json.dumps({"message": "Assistant not found"})
+                }
+
+            # Hash new password
+            new_hash = bcrypt.hashpw(
+                new_password.encode("utf-8"),
+                bcrypt.gensalt()
+            ).decode("utf-8")
+
+            # Update password
+            assistants_table.update_item(
+                Key={"assistantId": assistant_id},
+                UpdateExpression="SET password_hash = :p, updatedAt = :u",
+                ExpressionAttributeValues={
+                    ":p": new_hash,
+                    ":u": datetime.utcnow().isoformat() + "Z"
+                }
+            )
+
+            return {
+                "statusCode": 200,
+                "headers": cors,
+                "body": json.dumps({
+                    "message": "Password updated successfully"
+                })
+            }
+
         # -----------------------------------------
         # Validate Schema
         # -----------------------------------------
