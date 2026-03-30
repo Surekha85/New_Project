@@ -324,7 +324,7 @@ def get_all_candidates(candidates):
             "linkedin": item.get("linkedin"),
             "resumeUrl": item.get("resumeUrl"),
             "resumeFileExtension": item.get("resumeFileExtension"),
-            "assignedAssistants": item.get("assginedAssistants"),
+            "assignedAssistants": item.get("assignedAssistants"),
             "address": {
                 "street": item.get("address", {}).get("street"),
                 "city": item.get("address", {}).get("city"),
