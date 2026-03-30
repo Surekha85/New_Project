@@ -151,6 +151,9 @@ def assign_candidate(assistant_id, candidate_id):
 
         new_item = new_assistant["Item"]
         new_list = new_item.get("assigned_candidates", {}).get("L", [])
+        first_name = new_item.get("first_name", {}).get("S", "")
+        last_name = new_item.get("last_name", {}).get("S", "")
+        assistant_name = f"{first_name} {last_name}".strip()
 
         # avoid duplicates
         if not any(c.get("S") == candidate_id for c in new_list):
@@ -173,9 +176,14 @@ def assign_candidate(assistant_id, candidate_id):
         candidate_dynamo.update_item(
             TableName=candidate_table,
             Key={"jaa_candidate_id": {"S": candidate_id}},
-            UpdateExpression="SET assistantAssignedTo=:aid, updatedAt=:time",
+            UpdateExpression="""
+                SET assistantAssignedTo = :aid,
+                    assistantAssignedName = :aname,
+                    updatedAt = :time
+            """,
             ExpressionAttributeValues={
                 ":aid": {"S": assistant_id},
+                ":aname": {"S": assistant_name},
                 ":time": {"S": now}
             }
         )

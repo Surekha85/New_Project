@@ -267,6 +267,7 @@ def get_candidate_profile(candidate_id: str, request: Request):
             "resumeUrl": item.get("resumeUrl"),
             "resumeFileExtension": item.get("resumeFileExtension"),
             "assistantAssignedTo": item.get("assistantAssignedTo"),
+            "assistantAssignedName": item.get("assistantAssignedName"),
             "address": {
                 "street": item.get("address", {}).get("street"),
                 "city": item.get("address", {}).get("city"),
