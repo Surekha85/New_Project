@@ -74,94 +74,122 @@ def assume_role(role_arn):
     )
 
 # assign candidate to assistant
-def assign_candidate(assistant_id,candidate_id):
+def assign_candidate(assistant_id, candidate_id):
 
-    candidate_dynamo=assume_role(os.environ["CANDIDATE_DYNAMO_ROLE_ARN"])
-    assistant_dynamo=assume_role(os.environ["ASSISTANT_DYNAMO_ROLE_ARN"])
+    candidate_dynamo = assume_role(os.environ["CANDIDATE_DYNAMO_ROLE_ARN"])
+    assistant_dynamo = assume_role(os.environ["ASSISTANT_DYNAMO_ROLE_ARN"])
 
-    candidate_table=os.environ["CANDIDATES_TABLE"]
-    assistant_table=os.environ["ASSISTANTS_TABLE"]
+    candidate_table = os.environ["CANDIDATES_TABLE"]
+    assistant_table = os.environ["ASSISTANTS_TABLE"]
 
-    # get candidate
-    candidate=candidate_dynamo.get_item(
+    # ===============================
+    # STEP 1: GET CANDIDATE
+    # ===============================
+    candidate = candidate_dynamo.get_item(
         TableName=candidate_table,
-        Key={"jaa_candidate_id":{"S":candidate_id}}
+        Key={"jaa_candidate_id": {"S": candidate_id}}
     )
+
     if "Item" not in candidate:
-        return{"message":"Candidate not found"}
+        return {"message": "Candidate not found"}
 
-    # get assistant
-    assistant=assistant_dynamo.get_item(
-        TableName=assistant_table,
-        Key={"assistantId":{"S":assistant_id}}
-    )
-    if "Item" not in assistant:
-        return{"message":"Assistant not found"}
+    candidate_item = candidate["Item"]
 
-    candidate_item=candidate["Item"]
-    assistant_item=assistant["Item"]
+    # existing assistant
+    existing_assistant = candidate_item.get("assistantAssignedTo", {}).get("S")
 
-    # check candidate already assigned
-    existing_assistant=candidate_item.get("assistantAssignedTo",{}).get("S")
-
-    if existing_assistant:
-        if existing_assistant==assistant_id:
-            return{"message":"Candidate already assigned to this assistant"}
-        return{"message":"Candidate already assigned to another assistant"}
-
-    # check assistant assigned list
-    assigned_ids=[c["S"] for c in assistant_item.get("assigned_candidates",{}).get("L",[])]
-
-    if candidate_id in assigned_ids:
-        return{"message":"Candidate already present in assistant list"}
-
-    now=datetime.utcnow().isoformat()
+    now = datetime.utcnow().isoformat()
 
     try:
 
-        # update candidate
-        candidate_dynamo.update_item(
-            TableName=candidate_table,
-            Key={"jaa_candidate_id":{"S":candidate_id}},
-            ConditionExpression="attribute_not_exists(assistantAssignedTo)",
-            UpdateExpression="SET assistantAssignedTo=:aid,updatedAt=:time",
-            ExpressionAttributeValues={
-                ":aid":{"S":assistant_id},
-                ":time":{"S":now}
-            }
+        # ===============================
+        # STEP 2: IF ALREADY ASSIGNED
+        # ===============================
+        if existing_assistant:
+
+            # SAME assistant → STOP
+            if existing_assistant == assistant_id:
+                return {"message": "Candidate already assigned to this assistant"}
+
+            # ===============================
+            # STEP 3: REMOVE FROM OLD ASSISTANT
+            # ===============================
+            old_assistant = assistant_dynamo.get_item(
+                TableName=assistant_table,
+                Key={"assistantId": {"S": existing_assistant}}
+            )
+
+            if "Item" in old_assistant:
+                old_item = old_assistant["Item"]
+
+                old_list = old_item.get("assigned_candidates", {}).get("L", [])
+
+                updated_old_list = [
+                    c for c in old_list if c.get("S") != candidate_id
+                ]
+
+                assistant_dynamo.update_item(
+                    TableName=assistant_table,
+                    Key={"assistantId": {"S": existing_assistant}},
+                    UpdateExpression="SET assigned_candidates=:list, updatedAt=:time",
+                    ExpressionAttributeValues={
+                        ":list": {"L": updated_old_list},
+                        ":time": {"S": now}
+                    }
+                )
+
+        # ===============================
+        # STEP 4: ADD TO NEW ASSISTANT
+        # ===============================
+        new_assistant = assistant_dynamo.get_item(
+            TableName=assistant_table,
+            Key={"assistantId": {"S": assistant_id}}
         )
 
-        # update assistant
-        assistant_dynamo.update_item(
-            TableName=assistant_table,
-            Key={"assistantId":{"S":assistant_id}},
-            UpdateExpression="""SET assigned_candidates=
-            list_append(if_not_exists(assigned_candidates,:empty),:cid),
-            updatedAt=:time""",
+        if "Item" not in new_assistant:
+            return {"message": "New assistant not found"}
+
+        new_item = new_assistant["Item"]
+        new_list = new_item.get("assigned_candidates", {}).get("L", [])
+
+        # avoid duplicates
+        if not any(c.get("S") == candidate_id for c in new_list):
+            assistant_dynamo.update_item(
+                TableName=assistant_table,
+                Key={"assistantId": {"S": assistant_id}},
+                UpdateExpression="""SET assigned_candidates =
+                list_append(if_not_exists(assigned_candidates, :empty), :cid),
+                updatedAt=:time""",
+                ExpressionAttributeValues={
+                    ":cid": {"L": [{"S": candidate_id}]},
+                    ":empty": {"L": []},
+                    ":time": {"S": now}
+                }
+            )
+
+        # ===============================
+        # STEP 5: UPDATE CANDIDATE TABLE
+        # ===============================
+        candidate_dynamo.update_item(
+            TableName=candidate_table,
+            Key={"jaa_candidate_id": {"S": candidate_id}},
+            UpdateExpression="SET assistantAssignedTo=:aid, updatedAt=:time",
             ExpressionAttributeValues={
-                ":cid":{"L":[{"S":candidate_id}]},
-                ":empty":{"L":[]},
-                ":time":{"S":now}
+                ":aid": {"S": assistant_id},
+                ":time": {"S": now}
             }
         )
 
     except ClientError as e:
-
-        error_code=e.response['Error']['Code']
-
-        # fallback safety (normally should not happen)
-        if error_code=="ConditionalCheckFailedException":
-            return{"message":"Assignment already processed"}
-
-        return{
-            "message":"Assignment failed",
-            "error":str(e)
+        return {
+            "message": "Assignment failed",
+            "error": str(e)
         }
 
-    return{
-        "message":"Candidate assigned successfully",
-        "assistantId":assistant_id,
-        "candidateId":candidate_id
+    return {
+        "message": "Candidate assigned/updated successfully",
+        "assistantId": assistant_id,
+        "candidateId": candidate_id
     }
 
 # lambda handler
