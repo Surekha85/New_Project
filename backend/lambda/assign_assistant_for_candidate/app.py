@@ -95,95 +95,78 @@ def assign_candidate(assistant_id, candidate_id):
 
     candidate_item = candidate["Item"]
 
-    # existing assistant
-    existing_assistant = candidate_item.get("assistantAssignedTo", {}).get("S")
+    # existing assistants list
+    existing_list = candidate_item.get("assignedAssistants", {}).get("L", [])
+
+    # ===============================
+    # STEP 2: GET NEW ASSISTANT
+    # ===============================
+    new_assistant = assistant_dynamo.get_item(
+        TableName=assistant_table,
+        Key={"assistantId": {"S": assistant_id}}
+    )
+
+    if "Item" not in new_assistant:
+        return {"message": "Assistant not found"}
+
+    new_item = new_assistant["Item"]
+
+    first_name = new_item.get("first_name", {}).get("S", "")
+    last_name = new_item.get("last_name", {}).get("S", "")
+    assistant_name = f"{first_name} {last_name}".strip()
 
     now = datetime.utcnow().isoformat()
 
     try:
 
         # ===============================
-        # STEP 2: IF ALREADY ASSIGNED
+        # STEP 3: CHECK DUPLICATE
         # ===============================
-        if existing_assistant:
-
-            # SAME assistant → STOP
-            if existing_assistant == assistant_id:
-                return {"message": "Candidate already assigned to this assistant"}
-
-            # ===============================
-            # STEP 3: REMOVE FROM OLD ASSISTANT
-            # ===============================
-            old_assistant = assistant_dynamo.get_item(
-                TableName=assistant_table,
-                Key={"assistantId": {"S": existing_assistant}}
-            )
-
-            if "Item" in old_assistant:
-                old_item = old_assistant["Item"]
-
-                old_list = old_item.get("assigned_candidates", {}).get("L", [])
-
-                updated_old_list = [
-                    c for c in old_list if c.get("S") != candidate_id
-                ]
-
-                assistant_dynamo.update_item(
-                    TableName=assistant_table,
-                    Key={"assistantId": {"S": existing_assistant}},
-                    UpdateExpression="SET assigned_candidates=:list, updatedAt=:time",
-                    ExpressionAttributeValues={
-                        ":list": {"L": updated_old_list},
-                        ":time": {"S": now}
-                    }
-                )
+        for a in existing_list:
+            if a.get("M", {}).get("assistantId", {}).get("S") == assistant_id:
+                return {"message": "Assistant already assigned to this candidate"}
 
         # ===============================
-        # STEP 4: ADD TO NEW ASSISTANT
+        # STEP 4: ADD TO CANDIDATE TABLE
         # ===============================
-        new_assistant = assistant_dynamo.get_item(
-            TableName=assistant_table,
-            Key={"assistantId": {"S": assistant_id}}
-        )
+        new_assistant_entry = {
+            "M": {
+                "assistantId": {"S": assistant_id},
+                "assistantName": {"S": assistant_name}
+            }
+        }
 
-        if "Item" not in new_assistant:
-            return {"message": "New assistant not found"}
-
-        new_item = new_assistant["Item"]
-        new_list = new_item.get("assigned_candidates", {}).get("L", [])
-        first_name = new_item.get("first_name", {}).get("S", "")
-        last_name = new_item.get("last_name", {}).get("S", "")
-        assistant_name = f"{first_name} {last_name}".strip()
-
-        # avoid duplicates
-        if not any(c.get("S") == candidate_id for c in new_list):
-            assistant_dynamo.update_item(
-                TableName=assistant_table,
-                Key={"assistantId": {"S": assistant_id}},
-                UpdateExpression="""SET assigned_candidates =
-                list_append(if_not_exists(assigned_candidates, :empty), :cid),
-                updatedAt=:time""",
-                ExpressionAttributeValues={
-                    ":cid": {"L": [{"S": candidate_id}]},
-                    ":empty": {"L": []},
-                    ":time": {"S": now}
-                }
-            )
-
-        # ===============================
-        # STEP 5: UPDATE CANDIDATE TABLE
-        # ===============================
         candidate_dynamo.update_item(
             TableName=candidate_table,
             Key={"jaa_candidate_id": {"S": candidate_id}},
             UpdateExpression="""
-                SET assistantAssignedTo = :aid,
-                    assistantAssignedName = :aname,
-                    updatedAt = :time
+                SET assignedAssistants = list_append(
+                    if_not_exists(assignedAssistants, :empty),
+                    :newAssistant
+                ),
+                updatedAt = :time
             """,
             ExpressionAttributeValues={
-                ":aid": {"S": assistant_id},
-                ":aname": {"S": assistant_name},
+                ":newAssistant": {"L": [new_assistant_entry]},
+                ":empty": {"L": []},
+                ":time": {"S": now}
+            }
+        )
+
+        # ===============================
+        # STEP 5: ADD TO ASSISTANT TABLE
+        # ===============================
+        assistant_dynamo.update_item(
+            TableName=assistant_table,
+            Key={"assistantId": {"S": assistant_id}},
+            UpdateExpression="""
+                SET assigned_candidates =
+                list_append(if_not_exists(assigned_candidates, :empty), :cid),
+                updatedAt = :time
+            """,
+            ExpressionAttributeValues={
+                ":cid": {"L": [{"S": candidate_id}]},
+                ":empty": {"L": []},
                 ":time": {"S": now}
             }
         )
@@ -195,8 +178,9 @@ def assign_candidate(assistant_id, candidate_id):
         }
 
     return {
-        "message": "Candidate assigned/updated successfully",
+        "message": "Assistant added to candidate successfully",
         "assistantId": assistant_id,
+        "assistantName": assistant_name,
         "candidateId": candidate_id
     }
 
