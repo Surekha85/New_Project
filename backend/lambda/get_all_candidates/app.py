@@ -315,13 +315,15 @@ def get_all_candidates(candidates):
         candidate = {
             "jaa_candidate_id": item.get("jaa_candidate_id"),
             "user_id": item.get("user_id"),
+            "user_type": item.get("user_type"),
             "first_name": item.get("first_name"),
             "last_name": item.get("last_name"),
-            "email": item.get("email"),
+            "jobsyme_registered_email": item.get("jobsyme_registered_email"),
             "phone": item.get("phone"),
             "github": item.get("github"),
             "linkedin": item.get("linkedin"),
             "resumeUrl": item.get("resumeUrl"),
+            "resumeFileExtension": item.get("resumeFileExtension"),
             "assignedAssistants": item.get("assginedAssistants"),
             "address": {
                 "street": item.get("address", {}).get("street"),
@@ -330,25 +332,25 @@ def get_all_candidates(candidates):
                 "country": item.get("address", {}).get("country"),
                 "zip": item.get("address", {}).get("zip")
             },
-            "careerDetails": {
-                "highestEducation": item.get("careerDetails", {}).get("highestEducation"),
-                "yearsExperience": item.get("careerDetails", {}).get("yearsExperience"),
-                "skills": item.get("careerDetails", {}).get("skills"),
-                "preferredJobType": item.get("careerDetails", {}).get("preferredJobType"),
-                "dateAvailable": item.get("careerDetails", {}).get("dateAvailable"),
-                "workAuthorized": item.get("careerDetails", {}).get("workAuthorized"),
-                "visaRequired": item.get("careerDetails", {}).get("visaRequired"),
-                "validDriverLicense": item.get("careerDetails", {}).get("validDriverLicense"),
-                "willingToRelocate": item.get("careerDetails", {}).get("willingToRelocate"),
-                "vaccinationStatus": item.get("careerDetails", {}).get("vaccinationStatus")
+            "visaDetails": {
+                "vaccinationStatus": item.get("visaDetails", {}).get("vaccinationStatus"),
+                "yearsExperience": item.get("visaDetails", {}).get("yearsExperience"),
+                "authorizedToWorkInUS": item.get("visaDetails", {}).get("authorizedToWorkInUS"),
+                "workAuthorization": item.get("visaDetails", {}).get("workAuthorization"),
+                "currentVisa": item.get("visaDetails", {}).get("currentVisa"),
+                "requireSponsorship": item.get("visaDetails", {}).get("requireSponsorship"),
+                "securityClearance": item.get("visaDetails", {}).get("securityClearance"),
+                "willingToRelocate": item.get("visaDetails", {}).get("willingToRelocate"),
+                "validDriverLicenseOrStateId": item.get("visaDetails", {}).get("validDriverLicenseOrStateId")
             },
             "jobPreferences": {
                 "preferredJobTitles": item.get("jobPreferences", {}).get("preferredJobTitles"),
                 "preferredJobType": item.get("jobPreferences", {}).get("preferredJobType"),
-                "blockedCompanies": item.get("jobPreferences", {}).get("blockedCompanies"),
-                "recentInterviewedCompanies": item.get("jobPreferences", {}).get("recentInterviewedCompanies"),
+                "dateAvailable": item.get("jobPreferences", {}).get("dateAvailable"),
+                "preferredLocations": item.get("jobPreferences", {}).get("preferredLocations"),
                 "salaryExpectation": item.get("jobPreferences", {}).get("salaryExpectation"),
-                "timeZone": item.get("jobPreferences", {}).get("timeZone")
+                "blockedCompanies": item.get("jobPreferences", {}).get("blockedCompanies"),
+                "recentInterviewedCompanies": item.get("jobPreferences", {}).get("recentInterviewedCompanies", [])
             },
             "demographic": {
                 "gender": item.get("demographic", {}).get("gender"),
