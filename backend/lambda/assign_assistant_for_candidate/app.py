@@ -99,20 +99,20 @@ def assign_candidate(assistant_id, candidate_id):
     existing_list = candidate_item.get("assignedAssistants", {}).get("L", [])
 
     # ===============================
-    # STEP 2: GET NEW ASSISTANT
+    # STEP 2: GET ASSISTANT
     # ===============================
-    new_assistant = assistant_dynamo.get_item(
+    assistant = assistant_dynamo.get_item(
         TableName=assistant_table,
         Key={"assistantId": {"S": assistant_id}}
     )
 
-    if "Item" not in new_assistant:
+    if "Item" not in assistant:
         return {"message": "Assistant not found"}
 
-    new_item = new_assistant["Item"]
+    assistant_item = assistant["Item"]
 
-    first_name = new_item.get("first_name", {}).get("S", "")
-    last_name = new_item.get("last_name", {}).get("S", "")
+    first_name = assistant_item.get("first_name", {}).get("S", "")
+    last_name = assistant_item.get("last_name", {}).get("S", "")
     assistant_name = f"{first_name} {last_name}".strip()
 
     now = datetime.utcnow().isoformat()
@@ -120,69 +120,118 @@ def assign_candidate(assistant_id, candidate_id):
     try:
 
         # ===============================
-        # STEP 3: CHECK DUPLICATE
+        # STEP 3: CHECK IF EXISTS
         # ===============================
+        is_assigned = False
+
         for a in existing_list:
             if a.get("M", {}).get("assistantId", {}).get("S") == assistant_id:
-                return {"message": "Assistant already assigned to this candidate"}
+                is_assigned = True
+                break
 
         # ===============================
-        # STEP 4: ADD TO CANDIDATE TABLE
+        # 🔴 CASE 1: REMOVE
         # ===============================
-        new_assistant_entry = {
-            "M": {
-                "assistantId": {"S": assistant_id},
-                "assistantName": {"S": assistant_name}
-            }
-        }
+        if is_assigned:
 
-        candidate_dynamo.update_item(
-            TableName=candidate_table,
-            Key={"jaa_candidate_id": {"S": candidate_id}},
-            UpdateExpression="""
-                SET assignedAssistants = list_append(
-                    if_not_exists(assignedAssistants, :empty),
-                    :newAssistant
-                ),
-                updatedAt = :time
-            """,
-            ExpressionAttributeValues={
-                ":newAssistant": {"L": [new_assistant_entry]},
-                ":empty": {"L": []},
-                ":time": {"S": now}
+            # remove from candidate table
+            updated_list = [
+                a for a in existing_list
+                if a.get("M", {}).get("assistantId", {}).get("S") != assistant_id
+            ]
+
+            candidate_dynamo.update_item(
+                TableName=candidate_table,
+                Key={"jaa_candidate_id": {"S": candidate_id}},
+                UpdateExpression="SET assignedAssistants=:list, updatedAt=:time",
+                ExpressionAttributeValues={
+                    ":list": {"L": updated_list},
+                    ":time": {"S": now}
+                }
+            )
+
+            # remove from assistant table
+            existing_candidates = assistant_item.get("assigned_candidates", {}).get("L", [])
+
+            updated_candidates = [
+                c for c in existing_candidates
+                if c.get("S") != candidate_id
+            ]
+
+            assistant_dynamo.update_item(
+                TableName=assistant_table,
+                Key={"assistantId": {"S": assistant_id}},
+                UpdateExpression="SET assigned_candidates=:list, updatedAt=:time",
+                ExpressionAttributeValues={
+                    ":list": {"L": updated_candidates},
+                    ":time": {"S": now}
+                }
+            )
+
+            return {
+                "message": "Assistant removed successfully",
+                "assistantId": assistant_id,
+                "candidateId": candidate_id
             }
-        )
 
         # ===============================
-        # STEP 5: ADD TO ASSISTANT TABLE
+        # 🟢 CASE 2: ADD
         # ===============================
-        assistant_dynamo.update_item(
-            TableName=assistant_table,
-            Key={"assistantId": {"S": assistant_id}},
-            UpdateExpression="""
-                SET assigned_candidates =
-                list_append(if_not_exists(assigned_candidates, :empty), :cid),
-                updatedAt = :time
-            """,
-            ExpressionAttributeValues={
-                ":cid": {"L": [{"S": candidate_id}]},
-                ":empty": {"L": []},
-                ":time": {"S": now}
+        else:
+
+            new_assistant_entry = {
+                "M": {
+                    "assistantId": {"S": assistant_id},
+                    "assistantName": {"S": assistant_name}
+                }
             }
-        )
+
+            # add to candidate
+            candidate_dynamo.update_item(
+                TableName=candidate_table,
+                Key={"jaa_candidate_id": {"S": candidate_id}},
+                UpdateExpression="""
+                    SET assignedAssistants = list_append(
+                        if_not_exists(assignedAssistants, :empty),
+                        :newAssistant
+                    ),
+                    updatedAt = :time
+                """,
+                ExpressionAttributeValues={
+                    ":newAssistant": {"L": [new_assistant_entry]},
+                    ":empty": {"L": []},
+                    ":time": {"S": now}
+                }
+            )
+
+            # add to assistant
+            assistant_dynamo.update_item(
+                TableName=assistant_table,
+                Key={"assistantId": {"S": assistant_id}},
+                UpdateExpression="""
+                    SET assigned_candidates =
+                    list_append(if_not_exists(assigned_candidates, :empty), :cid),
+                    updatedAt = :time
+                """,
+                ExpressionAttributeValues={
+                    ":cid": {"L": [{"S": candidate_id}]},
+                    ":empty": {"L": []},
+                    ":time": {"S": now}
+                }
+            )
+
+            return {
+                "message": "Assistant assigned successfully",
+                "assistantId": assistant_id,
+                "assistantName": assistant_name,
+                "candidateId": candidate_id
+            }
 
     except ClientError as e:
         return {
-            "message": "Assignment failed",
+            "message": "Operation failed",
             "error": str(e)
         }
-
-    return {
-        "message": "Assistant added to candidate successfully",
-        "assistantId": assistant_id,
-        "assistantName": assistant_name,
-        "candidateId": candidate_id
-    }
 
 # lambda handler
 def handler(event,context):
